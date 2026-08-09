@@ -113,10 +113,7 @@ _FROZEN_QUERIES = {
 
 def _stable(value: object) -> object:
     if isinstance(value, dict):
-        return {
-            str(key): _stable(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        }
+        return {str(key): _stable(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))}
     if isinstance(value, (list, tuple)):
         return [_stable(item) for item in value]
     if isinstance(value, UUID):
@@ -201,19 +198,14 @@ def build_registration(
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    if any(
-        not path.startswith("docs/BRAND-MATRIX-01/GateD-记录/")
-        for path in changed_since_candidate
-    ):
+    if any(not path.startswith("docs/BRAND-MATRIX-01/GateD-记录/") for path in changed_since_candidate):
         raise ValueError("runtime candidate differs from HEAD outside Gate D records")
     environment = parse_authorized_deepseek_env(env_path)
     model = environment["DEEPSEEK_MODEL"]
     media = _load_object(_ROOT / "docs/BRAND-MATRIX-01/GateD-记录/media-master-manifest.json")
     if media.get("manifest_digest") != EXPECTED_MEDIA_DIGEST:
         raise ValueError("runtime freeze media manifest digest differs")
-    import_evidence = _load_object(
-        _ROOT / "docs/BRAND-MATRIX-01/GateD-记录/import-rehearsal-evidence.json"
-    )
+    import_evidence = _load_object(_ROOT / "docs/BRAND-MATRIX-01/GateD-记录/import-rehearsal-evidence.json")
     first_round = import_evidence.get("round_one")
     if not isinstance(first_round, dict):
         raise ValueError("runtime freeze import evidence is incomplete")
@@ -225,17 +217,17 @@ def build_registration(
         "model": model,
         "temperature": 0,
         "max_retries": 0,
+        "content_max_retries": 0,
+        "transport_max_retries": 2,
+        "retry_policy_version": "provider-transport-v1",
+        "same_candidate_resume_policy": ("interrupted_card_only_after_explicit_user_continue"),
         "prompt_contracts": {
-            "prompt_5_rev3_sha256": _file_sha256(
-                _ROOT / "docs/BRAND-MATRIX-01/GateD-记录/Prompt-5-rev3.md"
-            ),
+            "prompt_5_rev3_sha256": _file_sha256(_ROOT / "docs/BRAND-MATRIX-01/GateD-记录/Prompt-5-rev3.md"),
             "formal_suite_contract_sha256": _file_sha256(
                 _ROOT / "docs/BRAND-MATRIX-01/GateD-记录/formal-suite-contract.json"
             ),
         },
-        "gate_a_manifest_digest": _file_sha256(
-            _ROOT / "docs/BRAND-MATRIX-01/GateA-素材合同/import-manifest.json"
-        ),
+        "gate_a_manifest_digest": _file_sha256(_ROOT / "docs/BRAND-MATRIX-01/GateA-素材合同/import-manifest.json"),
         "import_batch_digest": first_round.get("batch_digest"),
         "import_object_fingerprint": first_round.get("object_fingerprint"),
         "media_manifest_digest": media["manifest_digest"],

@@ -12,8 +12,13 @@ import psycopg
 import pytest
 from pydantic import ValidationError
 
+from scripts.gated.provider_env import (
+    ProviderHandshakeError,
+    probe_provider_tcp_tls,
+)
 from scripts.gated.run_formal_acceptance import (
     PRIOR_RUNTIME_CANDIDATE_SHA,
+    EvidenceGenerator,
     _load_prior_ledger,
     _performance_review_annotations,
 )
@@ -33,6 +38,7 @@ from src.shared.publication_scope import (
     authorization_contract_document,
 )
 from src.shared.types import BrandContext, BrandContextPacketV3, TenantManagementScope, TrustedScope
+from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 
 _RERUN03_FACT_ID = "fact:product:gated-rerun-03"
 
@@ -40,14 +46,109 @@ _RERUN03_FACT_ID = "fact:product:gated-rerun-03"
 def test_gate_d_full_retry_preserves_all_prior_provider_attempts() -> None:
     candidate_sha, records = _load_prior_ledger(
         Path("docs/BRAND-MATRIX-01/GateD-记录/provider-ledger.json"),
-        expected_count=42,
+        expected_count=44,
     )
 
     assert candidate_sha == PRIOR_RUNTIME_CANDIDATE_SHA
-    assert len(records) == 42
-    assert records[-1]["card_id"] == "S06-S04-P3"
+    assert len(records) == 44
+    assert records[-1]["card_id"] == "S01-P2"
     assert records[-1]["binary_result"] == "FAILED_SAFE_PROVIDER_REQUEST"
     assert records[-1]["response_sha256"] is None
+
+
+def test_gate_d_provider_handshake_is_direct_and_spends_no_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[str, int], float]] = []
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    class TlsConnection(Connection):
+        def version(self) -> str:
+            return "TLSv1.3"
+
+    class Context:
+        def wrap_socket(
+            self,
+            connection: Connection,
+            *,
+            server_hostname: str,
+        ) -> TlsConnection:
+            assert isinstance(connection, Connection)
+            assert server_hostname == "dashscope.aliyuncs.com"
+            return TlsConnection()
+
+    def create_connection(
+        address: tuple[str, int],
+        *,
+        timeout: float,
+    ) -> Connection:
+        calls.append((address, timeout))
+        return Connection()
+
+    monkeypatch.setenv("ALL_PROXY", "socks5h://172.18.80.1:16005")
+    monkeypatch.setattr("scripts.gated.provider_env.socket.create_connection", create_connection)
+    monkeypatch.setattr("scripts.gated.provider_env.ssl.create_default_context", Context)
+
+    result = probe_provider_tcp_tls(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        timeout_seconds=3.0,
+    )
+
+    assert calls == [(("dashscope.aliyuncs.com", 443), 3.0)]
+    assert result["status"] == "PASS"
+    assert result["completion_requests"] == 0
+    assert result["provider_budget_consumed"] == 0
+
+
+def test_gate_d_provider_handshake_fails_closed_for_other_hosts() -> None:
+    with pytest.raises(ProviderHandshakeError):
+        probe_provider_tcp_tls("https://example.invalid/v1")
+
+
+def test_gate_d_evidence_ledger_records_transport_retries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response: dict[str, object] = {
+        "choices": [{"message": {"content": '{"ok":true}'}}],
+        "usage": {},
+    }
+
+    def request(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, object], int]:
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        return response, 2
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", request)
+    generator = EvidenceGenerator(
+        evidence_root=tmp_path,
+        prior_request_count=44,
+        api_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        api_key="x",
+        model="deepseek-test",
+        max_retries=0,
+        transport_max_retries=2,
+    )
+    generator.begin_card("TEST-CARD")
+
+    _, retries = generator._request("system", "prompt", 20)
+
+    assert retries == 2
+    assert generator.transport_retry_count == 2
+    assert generator.ledger[0]["transport_retries"] == 2
 
 
 def test_gate_d_review_package_records_bare_performance_terms_without_blocking() -> None:
@@ -120,9 +221,7 @@ def _rerun03_completion_patch(
         "writer_request_v3_digest": "1" * 64,
         "writer_output_v3": {"output_version": "writer-output-v3"},
         "writer_output_v3_digest": "2" * 64,
-        "writer_confirmed_product_fact_refs": (
-            [_RERUN03_FACT_ID] if fact_refs is None else fact_refs
-        ),
+        "writer_confirmed_product_fact_refs": ([_RERUN03_FACT_ID] if fact_refs is None else fact_refs),
         "used_persona_quote_ids": normalized_quote_ids,
         "expression_plan_version": "creative-kernel-v5",
         "expression_plan_digest": "3" * 64,
@@ -413,9 +512,7 @@ def test_gated_d0_api_contract_forbids_client_owned_governance_fields() -> None:
         "source_digest",
     ):
         with pytest.raises(ValidationError):
-            BrandPublicationProjectionCandidateRequest.model_validate(
-                {"items": [valid | {forbidden: "client-forged"}]}
-            )
+            BrandPublicationProjectionCandidateRequest.model_validate({"items": [valid | {forbidden: "client-forged"}]})
     settings = Settings.model_validate(
         {
             "session_secret": "gated-d0-test-session-secret-000001",
@@ -440,23 +537,18 @@ def test_gated_rerun03_completion_snapshot_commits_the_failed_shape(
     migrator_database_url: str,
 ) -> None:
     fixture = json.loads(
-        (
-            Path(__file__).parent
-            / "fixtures/gated_rerun03_completion_snapshot_regression.json"
-        ).read_text(encoding="utf-8")
+        (Path(__file__).parent / "fixtures/gated_rerun03_completion_snapshot_regression.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert fixture["source_task_id"] == "3bafbf45-fb92-45ae-b832-984ef425a5f8"
     assert fixture["source_run_id"] == "27b810b8-f219-4d72-aaf8-b2b1aee1f80e"
-    assert fixture["source_failure_code"] == (
-        "PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED"
-    )
+    assert fixture["source_failure_code"] == ("PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED")
     _, content_scope, _, _ = _seed_d0_scope(migrator_database_url)
     patch = _rerun03_completion_patch()
-    assert sorted(
-        key
-        for key in patch
-        if key in PostgresContentRepository._PUBLICATION_V3_GROUNDING_KEYS
-    ) == sorted(cast(list[str], fixture["required_completion_fields"]))
+    assert sorted(key for key in patch if key in PostgresContentRepository._PUBLICATION_V3_GROUNDING_KEYS) == sorted(
+        cast(list[str], fixture["required_completion_fields"])
+    )
     repository = PostgresContentRepository(app_database_url)
     context = BrandContext(
         brand_name="笛语",
@@ -508,9 +600,7 @@ def test_gated_rerun03_completion_snapshot_commits_the_failed_shape(
     assert result["version"] == fixture["expected_version_after_fix"] == 1
     committed_snapshot = repository.load_content_context_snapshot(content_scope, task_id)
     assert committed_snapshot is not None
-    assert committed_snapshot["writer_confirmed_product_fact_refs"] == [
-        _RERUN03_FACT_ID
-    ]
+    assert committed_snapshot["writer_confirmed_product_fact_refs"] == [_RERUN03_FACT_ID]
     assert committed_snapshot["used_persona_quote_ids"] == []
 
 
@@ -570,9 +660,7 @@ def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -
             "Writer 确认商品事实引用超出冻结事实包",
         ),
         (
-            _rerun03_completion_patch(
-                fact_refs=[_RERUN03_FACT_ID, _RERUN03_FACT_ID]
-            ),
+            _rerun03_completion_patch(fact_refs=[_RERUN03_FACT_ID, _RERUN03_FACT_ID]),
             "Writer 确认商品事实引用无效",
         ),
         (

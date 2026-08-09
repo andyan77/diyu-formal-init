@@ -109,9 +109,7 @@ def _assert_import() -> tuple[str, str]:
     evidence = _document("import-rehearsal-evidence.json")
     first = cast(dict[str, Any], evidence.get("round_one"))
     second = cast(dict[str, Any], evidence.get("round_two"))
-    if not evidence.get("byte_identical_batch_digest") or not evidence.get(
-        "byte_identical_object_fingerprint"
-    ):
+    if not evidence.get("byte_identical_batch_digest") or not evidence.get("byte_identical_object_fingerprint"):
         raise SystemExit("Gate D semantics FAIL: two-round equality flags are false")
     for key in ("batch_digest", "object_fingerprint"):
         if first.get(key) != second.get(key) or len(str(first.get(key, ""))) != 64:
@@ -120,9 +118,7 @@ def _assert_import() -> tuple[str, str]:
         inventory = cast(dict[str, Any], round_value.get("inventory"))
         for key, expected in _EXPECTED_INVENTORY.items():
             if inventory.get(key) != expected:
-                raise SystemExit(
-                    f"Gate D semantics FAIL: inventory {key}={inventory.get(key)} expected={expected}"
-                )
+                raise SystemExit(f"Gate D semantics FAIL: inventory {key}={inventory.get(key)} expected={expected}")
         readback = cast(dict[str, Any], round_value.get("formal_readback"))
         expected_readback = {
             "authorization_amendment_id": "AMD-AUTH-20260809-01",
@@ -151,11 +147,7 @@ def _assert_import() -> tuple[str, str]:
             or {chain.get("amendment_id") for chain in chains} != {"AMD-AUTH-20260809-01"}
             or {chain.get("prior_authorization_version") for chain in chains} != {"v1"}
             or {chain.get("authorization_version") for chain in chains} != {"v2"}
-            or any(
-                len(str(chain.get(key, ""))) != 64
-                for chain in chains
-                for key in ("prior_digest", "digest")
-            )
+            or any(len(str(chain.get(key, ""))) != 64 for chain in chains for key in ("prior_digest", "digest"))
         ):
             raise SystemExit("Gate D semantics FAIL: authorization supersede digest chain differs")
     return str(first["batch_digest"]), str(first["object_fingerprint"])
@@ -181,8 +173,7 @@ def _assert_consumers() -> None:
     task_snapshots = cast(list[dict[str, Any]], scope.get("formal_task_snapshots"))
     if (
         len(task_snapshots) != 7
-        or {item.get("account_code") for item in task_snapshots}
-        != {"H01", "R01", "R02", "S01", "S02", "S03", "S04"}
+        or {item.get("account_code") for item in task_snapshots} != {"H01", "R01", "R02", "S01", "S02", "S03", "S04"}
         or any(not item.get("projection_item_ids") for item in task_snapshots)
         or any(item.get("provider_requests") != 0 for item in task_snapshots)
     ):
@@ -210,10 +201,7 @@ def _assert_consumers() -> None:
             )
         ):
             raise SystemExit("Gate D semantics FAIL: authorization state-machine evidence failed")
-        if (
-            fixture.get("fixture_scope") != "DEMO-TEST"
-            or fixture.get("occupies_persona_quote_library") is not False
-        ):
+        if fixture.get("fixture_scope") != "DEMO-TEST" or fixture.get("occupies_persona_quote_library") is not False:
             raise SystemExit("Gate D semantics FAIL: authorization fixture isolation differs")
     if authorization.get("formal_persona_authorization_events") != 0:
         raise SystemExit("Gate D semantics FAIL: deterministic preflight consumed formal business authorization")
@@ -223,9 +211,7 @@ def _assert_authorization_orchestration_isolation() -> None:
     importer = _source("scripts/gated/brand_matrix_importer.py")
     rehearsal = _source("scripts/gated/assert_rehearsal_semantics.py")
     runner = _source("scripts/gated/run_formal_acceptance.py")
-    amendment = _source(
-        "docs/BRAND-MATRIX-01/GateD-记录/授权修订单-AMD-AUTH-20260809-01.md"
-    )
+    amendment = _source("docs/BRAND-MATRIX-01/GateD-记录/授权修订单-AMD-AUTH-20260809-01.md")
     _require(
         importer,
         (
@@ -241,7 +227,7 @@ def _assert_authorization_orchestration_isolation() -> None:
     _require(
         rehearsal,
         (
-            '_SYNTHETIC_AUTHORIZATION_FIXTURES = (',
+            "_SYNTHETIC_AUTHORIZATION_FIXTURES = (",
             'if not subject_ref.startswith("DEMO-TEST-QUOTE-")',
             '"formal_persona_authorization_events":',
             "def assert_single_use_fixture_evidence(",
@@ -334,9 +320,7 @@ def _assert_media() -> str:
     }
     if eligible_pairs != required_pairs:
         raise SystemExit("Gate D semantics FAIL: formal P5 media pool differs")
-    attestation = (_EVIDENCE / "媒体权利授权-ATT-MEDIA-20260808-01.md").read_text(
-        encoding="utf-8"
-    )
+    attestation = (_EVIDENCE / "媒体权利授权-ATT-MEDIA-20260808-01.md").read_text(encoding="utf-8")
     if (
         "「裁决：A；覆盖26条，确认授权；" not in attestation
         or _MEDIA_SCOPE not in attestation
@@ -375,26 +359,27 @@ def _assert_media() -> str:
 
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
-    if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v8"
-        or contract.get("expected_counts")
-        != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
-    ):
+    if contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v9" or contract.get("expected_counts") != {
+        "anomalies": 8,
+        "cards": 15,
+        "content_products": 5,
+        "scenarios": 8,
+    }:
         raise SystemExit("Gate D semantics FAIL: formal suite counts differ")
     constraints = cast(dict[str, Any], contract.get("constraints"))
     if (
         constraints.get("maximum_provider_requests") != 80
-        or constraints.get("maximum_transport_retries") != 0
-        or constraints.get("prior_provider_requests") != 42
+        or constraints.get("content_max_retries") != 0
+        or constraints.get("maximum_transport_retries") != 2
+        or constraints.get("prior_provider_requests") != 44
         or constraints.get("temperature") != 0
-        or constraints.get("writer_assertion_policy")
-        != "ADJ-WRITER-BOUNDARY-05-PERFORMANCE-POLARITY"
+        or constraints.get("writer_assertion_policy") != "ADJ-WRITER-BOUNDARY-05-PERFORMANCE-POLARITY"
         or constraints.get("authorization_policy")
         != "AMD-AUTH-20260809-01-REPEATABLE-BUSINESS-AND-DEMO-TEST-SINGLE-USE"
-        or constraints.get("orchestration_isolation")
-        != "deterministic_preflight_consumes_fixture_only"
-        or constraints.get("retry_policy")
-        != "FULL_SUITE_NO_SPLICE_USER_RETRY-20260809-01"
+        or constraints.get("orchestration_isolation") != "deterministic_preflight_consumes_fixture_only"
+        or constraints.get("retry_policy") != "DIRECT_PROVIDER_TRANSPORT_RETRY_V1"
+        or constraints.get("provider_handshake_policy") != "DIRECT_TCP_TLS_BEFORE_SUITE_ZERO_COMPLETION_REQUESTS"
+        or constraints.get("same_candidate_resume_policy") != "INTERRUPTED_CARD_ONLY_AFTER_EXPLICIT_USER_CONTINUE"
     ):
         raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
     cards = cast(list[dict[str, Any]], contract.get("cards"))
@@ -422,11 +407,7 @@ def _assert_formal_suite_contract() -> None:
         "登记一条门店反馈观察",
         "不得使用未确认反馈",
     )
-    if any(
-        term in str(card.get("seed", ""))
-        for card in cards
-        for term in internal_prompt_terms
-    ):
+    if any(term in str(card.get("seed", "")) for card in cards for term in internal_prompt_terms):
         raise SystemExit("Gate D semantics FAIL: formal cards expose internal governance language")
     runner = _source("scripts/gated/run_formal_acceptance.py")
     _require(
@@ -434,6 +415,9 @@ def _assert_formal_suite_contract() -> None:
         (
             '"temperature": 0.0',
             "max_retries=0",
+            "transport_max_retries=MAX_TRANSPORT_RETRIES",
+            "probe_provider_tcp_tls(api_base_url)",
+            "GATED_FORMAL_SUITE_PRECONDITION_BLOCKED",
             "each formal card must receive exactly one Writer response",
             '"performance_term_review_annotations"',
             '"bare_performance_term_review"',
@@ -480,6 +464,9 @@ def _assert_formal_suite_contract() -> None:
             "不得写入 ProductFact",
             "如果你需要／如果你的条件是",
             "账号画像只提供观察角度，不提供自传",
+            "trust_env=False",
+            '"transport_empty_5xx"',
+            "self._transport_max_retries",
         ),
         "Writer truth and persona prompt boundary",
     )
@@ -495,6 +482,9 @@ def _assert_formal_suite_contract() -> None:
             "test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive",
             "test_publication_v3_allows_prior_s05_r01_negated_performance_boundary",
             "test_bare_performance_terms_are_non_blocking_review_annotations",
+            "test_provider_client_ignores_polluted_proxy_environment",
+            "test_provider_transport_failure_retries_then_returns_once",
+            "test_provider_valid_content_response_is_never_retried",
             "整套搭配里最好不要再出现第二个强色",
             "先看这一眼",
             "如果你需要的是防风防水的功能外套，那它就不是那个答案",
@@ -528,6 +518,8 @@ def _assert_formal_suite_contract() -> None:
             "test_gated_rerun03_completion_grounding_rejects_invalid_shapes",
             "test_gated_rerun03_single_use_quote_matches_frozen_authorization",
             "test_gated_rerun05_repeatable_persona_quote_can_be_committed_again",
+            "test_gate_d_provider_handshake_is_direct_and_spends_no_request",
+            "test_gate_d_evidence_ledger_records_transport_retries",
             "3bafbf45-fb92-45ae-b832-984ef425a5f8",
             "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
         ),

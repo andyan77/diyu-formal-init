@@ -39,7 +39,9 @@ from scripts.gated.freeze_runtime_candidate import (  # noqa: E402
 )
 from scripts.gated.provider_env import (  # noqa: E402
     AUTHORIZED_KEYS,
+    ProviderHandshakeError,
     parse_authorized_deepseek_env,
+    probe_provider_tcp_tls,
 )
 from src.brain.content_control_service import ContentControlService  # noqa: E402
 from src.brain.content_service import ContentService  # noqa: E402
@@ -68,17 +70,32 @@ from src.shared.types import (  # noqa: E402
     TenantManagementScope,
     TrustedScope,
 )
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator  # noqa: E402
+from src.tool.llm_gateway.deepseek import (  # noqa: E402
+    DeepSeekGenerator,
+    ProviderRequestFailure,
+)
 
-SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v8"
+SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v9"
 MAX_PROVIDER_REQUESTS = 80
+MAX_TRANSPORT_RETRIES = 2
 INITIAL_RUNTIME_CANDIDATE_SHA = "997e6b55c1c40dacd44a46ff6617b28766011958"
 FIRST_RERUN_RUNTIME_CANDIDATE_SHA = "f7e8e81c80ebc8552794f82aab81ef509e242b14"
 SECOND_RERUN_RUNTIME_CANDIDATE_SHA = "ba4208a6ea96775683ecd89f41b6cd869b45eead"
 THIRD_RERUN_RUNTIME_CANDIDATE_SHA = "596b87e7e9d0551c6b62834137e03eed2bf52c82"
 FOURTH_RERUN_RUNTIME_CANDIDATE_SHA = "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9"
 FIFTH_RERUN_RUNTIME_CANDIDATE_SHA = "e0dba46689397f16a967efbc126621df0683f385"
-PRIOR_RUNTIME_CANDIDATE_SHA = "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b"
+SIXTH_RERUN_RUNTIME_CANDIDATE_SHA = "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b"
+PRIOR_RUNTIME_CANDIDATE_SHA = "587bed9168e92db7444db81ba9123b92a80cbacf"
+_RUNTIME_CANDIDATE_HISTORY = (
+    INITIAL_RUNTIME_CANDIDATE_SHA,
+    FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
+    SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
+    THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
+    FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
+    FIFTH_RERUN_RUNTIME_CANDIDATE_SHA,
+    SIXTH_RERUN_RUNTIME_CANDIDATE_SHA,
+    PRIOR_RUNTIME_CANDIDATE_SHA,
+)
 _ENV_PATH = Path("/home") / "faye" / "workspace" / "diyu-formal-init" / ".env"
 _ACCOUNT_ORGANIZATIONS = {
     "H01": "DIYU-HQ-001",
@@ -156,6 +173,7 @@ class EvidenceGenerator(DeepSeekGenerator):
         self._active_card: str | None = None
         self._active_responses: list[dict[str, Any]] = []
         self._ledger: list[dict[str, Any]] = []
+        self._failed_transport_retries = 0
 
     @property
     def request_count(self) -> int:
@@ -164,6 +182,10 @@ class EvidenceGenerator(DeepSeekGenerator):
     @property
     def cumulative_request_count(self) -> int:
         return self._prior_request_count + self.request_count
+
+    @property
+    def transport_retry_count(self) -> int:
+        return self._failed_transport_retries + sum(int(entry["transport_retries"]) for entry in self._ledger)
 
     @property
     def ledger(self) -> list[dict[str, Any]]:
@@ -189,16 +211,19 @@ class EvidenceGenerator(DeepSeekGenerator):
         self._active_card = None
         self._active_responses = []
 
-    def abort_card(self, error_type: str) -> None:
+    def abort_card(self, error: Exception) -> None:
         if self._active_card is None:
             return
+        transport_retries = error.retry_count if isinstance(error, ProviderRequestFailure) else 0
+        self._failed_transport_retries += transport_retries
         _write_private_json(
             self._evidence_root / f"{self._active_card}.failed.raw.json",
             {
                 "card_id": self._active_card,
-                "error_type": error_type,
+                "error_type": type(error).__name__,
                 "raw_bundle_version": "brand-matrix-gate-d-provider-failure-v1",
                 "responses": self._active_responses,
+                "transport_retries": transport_retries,
             },
         )
         self._active_card = None
@@ -237,8 +262,8 @@ class EvidenceGenerator(DeepSeekGenerator):
             thinking_disabled=thinking_disabled,
             timeout_seconds=timeout_seconds,
         )
-        if retries != 0:
-            raise RuntimeError("formal Gate D transport retries are forbidden")
+        if not 0 <= retries <= MAX_TRANSPORT_RETRIES:
+            raise RuntimeError("formal Gate D transport retry count is outside policy")
         record = {
             "card_id": card_id,
             "model": self.model_name,
@@ -250,13 +275,7 @@ class EvidenceGenerator(DeepSeekGenerator):
             "transport_retries": retries,
         }
         self._active_responses.append(record)
-        self._ledger.append(
-            {
-                key: value
-                for key, value in record.items()
-                if key != "response"
-            }
-        )
+        self._ledger.append({key: value for key, value in record.items() if key != "response"})
         return response, retries
 
 
@@ -301,8 +320,7 @@ def _parse_cards(contract: dict[str, Any]) -> tuple[Card, ...]:
         )
     if (
         len({card.card_id for card in cards}) != 15
-        or {card.scenario_id for card in cards}
-        != {f"SCENARIO-{index:02d}" for index in range(1, 9)}
+        or {card.scenario_id for card in cards} != {f"SCENARIO-{index:02d}" for index in range(1, 9)}
         or {card.content_product for card in cards} != products
     ):
         raise ValueError("formal suite card coverage differs")
@@ -319,30 +337,18 @@ def _load_prior_ledger(
     runtime_candidate_sha = str(document.get("runtime_candidate_sha", ""))
     if (
         runtime_candidate_sha != PRIOR_RUNTIME_CANDIDATE_SHA
-        or document.get("prior_runtime_candidate_sha")
-        != FIFTH_RERUN_RUNTIME_CANDIDATE_SHA
-        or document.get("initial_runtime_candidate_sha")
-        != INITIAL_RUNTIME_CANDIDATE_SHA
-        or document.get("runtime_candidate_chain")
-        != [
-            INITIAL_RUNTIME_CANDIDATE_SHA,
-            FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
-            SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
-            THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
-            FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
-            FIFTH_RERUN_RUNTIME_CANDIDATE_SHA,
-            PRIOR_RUNTIME_CANDIDATE_SHA,
-        ]
-        or document.get("prior_provider_request_count") != 29
-        or document.get("current_provider_request_count") != 13
-        or document.get("current_successful_response_count") != 12
+        or document.get("prior_runtime_candidate_sha") != SIXTH_RERUN_RUNTIME_CANDIDATE_SHA
+        or document.get("initial_runtime_candidate_sha") != INITIAL_RUNTIME_CANDIDATE_SHA
+        or document.get("runtime_candidate_chain") != list(_RUNTIME_CANDIDATE_HISTORY)
+        or document.get("prior_provider_request_count") != 42
+        or document.get("current_provider_request_count") != 2
+        or document.get("current_successful_response_count") != 1
         or document.get("current_failed_provider_request_count") != 1
         or document.get("status") != "FAILED_SAFE"
         or document.get("provider_request_count") != expected_count
         or not isinstance(records, list)
         or len(records) != expected_count
-        or [item.get("request_index") for item in records]
-        != list(range(1, expected_count + 1))
+        or [item.get("request_index") for item in records] != list(range(1, expected_count + 1))
     ):
         raise RuntimeError("prior failed-safe provider ledger differs")
     normalized: list[dict[str, Any]] = []
@@ -360,16 +366,14 @@ def _load_prior_ledger(
             expected_candidate = FOURTH_RERUN_RUNTIME_CANDIDATE_SHA
         elif request_index <= 29:
             expected_candidate = FIFTH_RERUN_RUNTIME_CANDIDATE_SHA
+        elif request_index <= 42:
+            expected_candidate = SIXTH_RERUN_RUNTIME_CANDIDATE_SHA
         else:
             expected_candidate = PRIOR_RUNTIME_CANDIDATE_SHA
-        recorded_candidate = str(
-            raw_record.get("runtime_candidate_sha", expected_candidate)
-        )
+        recorded_candidate = str(raw_record.get("runtime_candidate_sha", expected_candidate))
         if recorded_candidate != expected_candidate:
             raise RuntimeError("prior provider ledger candidate lineage differs")
-        normalized.append(
-            raw_record | {"runtime_candidate_sha": expected_candidate}
-        )
+        normalized.append(raw_record | {"runtime_candidate_sha": expected_candidate})
     return runtime_candidate_sha, normalized
 
 
@@ -732,8 +736,7 @@ def _pre_provider_anomalies(database_url: str) -> tuple[dict[str, Any], dict[str
         )
         actors = {UUID(str(row[0])) for row in cursor.fetchall()}
         cursor.execute(
-            "SELECT created_by,logical_account_id FROM business_tasks "
-            "WHERE tenant_id=%s AND id=ANY(%s)",
+            "SELECT created_by,logical_account_id FROM business_tasks WHERE tenant_id=%s AND id=ANY(%s)",
             (TENANT_ID, tasks),
         )
         ownership = cursor.fetchall()
@@ -789,9 +792,7 @@ def _register_feedback(
         },
     )
     observation_id = str(observation["id"])
-    visible = service.brand_feedback_observations(
-        TenantManagementScope(TENANT_ID, ADMIN_USER_ID, BRAND_ID)
-    )
+    visible = service.brand_feedback_observations(TenantManagementScope(TENANT_ID, ADMIN_USER_ID, BRAND_ID))
     if observation_id not in {str(item.get("id")) for item in visible}:
         raise RuntimeError("SCENARIO-08 feedback observation is not readable")
     return observation_id
@@ -812,17 +813,13 @@ def _scenario_assertions(
         scenario_one[0]["brand_relevance_family"] != "product_expertise"
         or scenario_one[1]["brand_relevance_family"] != "product_expertise"
         or scenario_one[2]["brand_relevance_family"] != "brand_visual"
-        or not scenario_one[0]["snapshot"]["publication_contract"]["product_decision_basis"].get(
-            "judgment_ref"
-        )
+        or not scenario_one[0]["snapshot"]["publication_contract"]["product_decision_basis"].get("judgment_ref")
     ):
         raise RuntimeError("SCENARIO-01 F/J/G or P5 evidence differs")
     scenario_results.append({"id": "SCENARIO-01", "result": "PASS", "card_count": 3})
 
     east = artifacts["S02-R01-P4"]["projection_claim_keys"]
-    if not any(value.startswith("RK-EC-") for value in east) or any(
-        value.startswith("RK-SW-") for value in east
-    ):
+    if not any(value.startswith("RK-EC-") for value in east) or any(value.startswith("RK-SW-") for value in east):
         raise RuntimeError("SCENARIO-02 did not consume only the East region context")
     scenario_results.append({"id": "SCENARIO-02", "result": "PASS", "card_count": 1})
 
@@ -840,32 +837,25 @@ def _scenario_assertions(
         raise RuntimeError("SCENARIO-04 content facts were polluted by the ordinary store file")
     scenario_results.append({"id": "SCENARIO-04", "result": "PASS", "card_count": 1})
 
-    scenario_five = [
-        artifacts[f"S05-{account}-P1"] for account in ("H01", "R01", "S01", "S04")
-    ]
+    scenario_five = [artifacts[f"S05-{account}-P1"] for account in ("H01", "R01", "S01", "S04")]
     if (
         len({item["product_fact_packet_digest"] for item in scenario_five}) != 1
-        or (
-            require_model_differences
-            and len({item["body_digest"] for item in scenario_five}) != 4
-        )
+        or (require_model_differences and len({item["body_digest"] for item in scenario_five}) != 4)
         or len({tuple(item["projection_claim_keys"]) for item in scenario_five}) < 3
     ):
         raise RuntimeError("SCENARIO-05 same-SKU four-node evidence lacks fact stability or expression difference")
     scenario_results.append({"id": "SCENARIO-05", "result": "PASS", "card_count": 4})
 
     scenario_six = [artifacts[f"S06-{account}-P3"] for account in ("H01", "S02", "S04")]
-    if (
-        require_model_differences
-        and len({item["body_digest"] for item in scenario_six}) != 3
-    ) or len({item["account_profile_id"] for item in scenario_six}) != 3:
+    if (require_model_differences and len({item["body_digest"] for item in scenario_six}) != 3) or len(
+        {item["account_profile_id"] for item in scenario_six}
+    ) != 3:
         raise RuntimeError("SCENARIO-06 same-seed artifacts or source profiles did not differ")
     dimensions = ("observation_angle", "judgment_order", "audience_relation", "closure_method")
     for left_index in range(len(scenario_six)):
         for right_index in range(left_index + 1, len(scenario_six)):
             changed = sum(
-                scenario_six[left_index]["lens_dimensions"][key]
-                != scenario_six[right_index]["lens_dimensions"][key]
+                scenario_six[left_index]["lens_dimensions"][key] != scenario_six[right_index]["lens_dimensions"][key]
                 for key in dimensions
             )
             if changed < 2:
@@ -900,10 +890,7 @@ def _scenario_assertions(
 
     post_feedback = artifacts["S08-S01-P4"]
     snapshot_text = json.dumps(post_feedback["snapshot"], ensure_ascii=False, sort_keys=True)
-    if (
-        feedback_observation_id in snapshot_text
-        or "GATED-OBSERVATION-NOT-FORMAL-SOURCE" in snapshot_text
-    ):
+    if feedback_observation_id in snapshot_text or "GATED-OBSERVATION-NOT-FORMAL-SOURCE" in snapshot_text:
         raise RuntimeError("SCENARIO-08 unconfirmed feedback entered the next task")
     scenario_results.append({"id": "SCENARIO-08", "result": "PASS", "card_count": 1})
     return scenario_results
@@ -923,6 +910,9 @@ def _assert_runtime_freeze(
         or registration.get("model") != model
         or registration.get("temperature") != 0
         or registration.get("max_retries") != 0
+        or registration.get("content_max_retries") != 0
+        or registration.get("transport_max_retries") != MAX_TRANSPORT_RETRIES
+        or registration.get("retry_policy_version") != "provider-transport-v1"
     ):
         raise RuntimeError("runtime candidate registration differs")
     claimed = str(registration.get("registration_digest", ""))
@@ -931,9 +921,9 @@ def _assert_runtime_freeze(
     if claimed != _canonical_digest(unsigned):
         raise RuntimeError("runtime candidate registration digest differs")
     prompt_contracts = registration.get("prompt_contracts")
-    if not isinstance(prompt_contracts, dict) or prompt_contracts.get(
-        "formal_suite_contract_sha256"
-    ) != _file_sha256(contract_path):
+    if not isinstance(prompt_contracts, dict) or prompt_contracts.get("formal_suite_contract_sha256") != _file_sha256(
+        contract_path
+    ):
         raise RuntimeError("formal suite contract changed after candidate freeze")
     database_digest, counts, projection_digest = database_input_fingerprint(database_url)
     if (
@@ -986,8 +976,6 @@ def _internal_run(arguments: argparse.Namespace) -> int:
     evidence_root = cast(Path, arguments.evidence_root).resolve()
     if evidence_root != expected_root or evidence_root.exists():
         raise RuntimeError("private evidence root must be the new candidate-bound 0700 directory")
-    evidence_root.mkdir(mode=0o700, parents=False)
-    evidence_root.chmod(0o700)
     contract_path = cast(Path, arguments.contract)
     registration = _load_object(cast(Path, arguments.registration))
     contract = _load_object(contract_path)
@@ -1012,6 +1000,10 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         str(arguments.app_database_url),
         model,
     )
+    handshake = probe_provider_tcp_tls(api_base_url)
+    evidence_root.mkdir(mode=0o700, parents=False)
+    evidence_root.chmod(0o700)
+    _write_private_json(evidence_root / "provider-handshake.json", handshake)
     anomaly_results, legacy = _pre_provider_anomalies(str(arguments.app_database_url))
     # Deterministic anomaly work may add only acceptance tasks/events/reservations;
     # the frozen input projection, accounts, products and media must remain identical.
@@ -1033,6 +1025,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         reviewer_provider=None,
         timeout_seconds=120.0,
         max_retries=0,
+        transport_max_retries=MAX_TRANSPORT_RETRIES,
     )
     control = ContentControlService(
         PostgresContentControlRepository(str(arguments.app_database_url)),
@@ -1055,9 +1048,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 )
             controls = (
                 RequestedControls(
-                    material_ids=tuple(
-                        matrix_id(f"media-master:{media_id}") for media_id in card.media_ids
-                    ),
+                    material_ids=tuple(matrix_id(f"media-master:{media_id}") for media_id in card.media_ids),
                     product_media_intent=True,
                 )
                 if card.media_ids
@@ -1075,7 +1066,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 persisted = _task_artifact(str(arguments.app_database_url), result)
                 artifact = _validate_artifact(card, result, persisted, model)
             except Exception as exc:
-                generator.abort_card(type(exc).__name__)
+                generator.abort_card(exc)
                 raise
             generator.finish_card()
             artifacts[card.card_id] = artifact
@@ -1095,18 +1086,10 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             str(arguments.app_database_url),
             feedback_observation_id,
         )
-        if (
-            generator.request_count != len(cards)
-            or generator.cumulative_request_count > MAX_PROVIDER_REQUESTS
-        ):
+        if generator.request_count != len(cards) or generator.cumulative_request_count > MAX_PROVIDER_REQUESTS:
             raise RuntimeError("formal provider ledger count differs")
         public_artifacts = [
-            {
-                key: value
-                for key, value in artifact.items()
-                if key != "snapshot"
-            }
-            for artifact in artifacts.values()
+            {key: value for key, value in artifact.items() if key != "snapshot"} for artifact in artifacts.values()
         ]
         performance_review_annotations = [
             annotation
@@ -1131,19 +1114,12 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         private_manifest = {
             "suite_version": SUITE_VERSION,
             "runtime_candidate_sha": candidate_sha,
-            "runtime_candidate_chain": [
-                INITIAL_RUNTIME_CANDIDATE_SHA,
-                FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
-                SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
-                THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
-                FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
-                FIFTH_RERUN_RUNTIME_CANDIDATE_SHA,
-                PRIOR_RUNTIME_CANDIDATE_SHA,
-                candidate_sha,
-            ],
+            "runtime_candidate_chain": [*_RUNTIME_CANDIDATE_HISTORY, candidate_sha],
             "registration_digest": registration["registration_digest"],
             "provider_request_count": generator.request_count,
             "cumulative_provider_request_count": generator.cumulative_request_count,
+            "provider_handshake": handshake,
+            "provider_transport_retries": generator.transport_retry_count,
             "scenario_results": scenario_results,
             "anomaly_results": [anomaly_results[key] for key in sorted(anomaly_results)],
             "artifact_ids": [
@@ -1167,25 +1143,19 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         public_evidence = {
             "suite_version": SUITE_VERSION,
             "runtime_candidate_sha": candidate_sha,
-            "runtime_candidate_chain": [
-                INITIAL_RUNTIME_CANDIDATE_SHA,
-                FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
-                SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
-                THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
-                FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
-                FIFTH_RERUN_RUNTIME_CANDIDATE_SHA,
-                PRIOR_RUNTIME_CANDIDATE_SHA,
-                candidate_sha,
-            ],
+            "runtime_candidate_chain": [*_RUNTIME_CANDIDATE_HISTORY, candidate_sha],
             "registration_digest": registration["registration_digest"],
             "model": model,
             "temperature": 0,
             "max_retries": 0,
+            "content_max_retries": 0,
+            "transport_max_retries": MAX_TRANSPORT_RETRIES,
             "provider_request_count": generator.request_count,
             "prior_provider_request_count": prior_request_count,
             "cumulative_provider_request_count": generator.cumulative_request_count,
             "provider_request_budget": MAX_PROVIDER_REQUESTS,
-            "provider_transport_retries": 0,
+            "provider_handshake": handshake,
+            "provider_transport_retries": generator.transport_retry_count,
             "scenario_results": scenario_results,
             "anomaly_results": [anomaly_results[key] for key in sorted(anomaly_results)],
             "artifact_index": public_artifacts,
@@ -1200,24 +1170,18 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         _write_public_json(
             cast(Path, arguments.public_ledger),
             {
-                "ledger_version": "brand-matrix-gate-d-provider-ledger-v8",
+                "ledger_version": "brand-matrix-gate-d-provider-ledger-v9",
                 "runtime_candidate_sha": candidate_sha,
                 "prior_runtime_candidate_sha": prior_candidate_sha,
-                "runtime_candidate_chain": [
-                    INITIAL_RUNTIME_CANDIDATE_SHA,
-                    FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
-                    SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
-                    THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
-                    FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
-                    FIFTH_RERUN_RUNTIME_CANDIDATE_SHA,
-                    PRIOR_RUNTIME_CANDIDATE_SHA,
-                    candidate_sha,
-                ],
+                "runtime_candidate_chain": [*_RUNTIME_CANDIDATE_HISTORY, candidate_sha],
                 "prior_provider_request_count": prior_request_count,
                 "current_provider_request_count": generator.request_count,
                 "provider_request_count": generator.cumulative_request_count,
                 "provider_request_budget": MAX_PROVIDER_REQUESTS,
-                "transport_retry_count": 0,
+                "current_transport_retry_count": generator.transport_retry_count,
+                "transport_retry_count": sum(
+                    int(record.get("transport_retries", 0)) for record in cumulative_public_ledger
+                ),
                 "records": cumulative_public_ledger,
                 "status": "PASS",
             },
@@ -1238,7 +1202,8 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         raise
     print(
         "GATED_FORMAL_SUITE_OK scenarios=8 anomalies=8 "
-        f"provider_requests={generator.request_count} retries=0 candidate={candidate_sha}"
+        f"provider_requests={generator.request_count} "
+        f"transport_retries={generator.transport_retry_count} candidate={candidate_sha}"
     )
     return 0
 
@@ -1305,6 +1270,12 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except ProviderHandshakeError as error:
+        print(
+            "GATED_FORMAL_SUITE_PRECONDITION_BLOCKED error_type=ProviderHandshakeError",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from error
     except (DomainError, GenerationFailed, RuntimeError, ValueError) as error:
         print(f"GATED_FORMAL_SUITE_FAILED_SAFE error_type={type(error).__name__}", file=sys.stderr)
         raise SystemExit(1) from error

@@ -231,11 +231,7 @@ def _writer_grounding_context(
     product_basis: ProductDecisionBasisV2 | None,
     contract: PublicationContractV3,
 ) -> tuple[ProductFactProjection, tuple[str, ...]]:
-    quote_ids = tuple(
-        ref
-        for ref in contract.brand_context_use.consumed_refs
-        if ref.startswith(("PS-S02-", "PS-S04-"))
-    )
+    quote_ids = tuple(ref for ref in contract.brand_context_use.consumed_refs if ref.startswith(("PS-S02-", "PS-S04-")))
     return _confirmed_product_fact_projection(packet, product_basis), quote_ids
 
 
@@ -244,9 +240,7 @@ def _writer_grounding_snapshot(
     persona_quote_ids: tuple[str, ...],
 ) -> dict[str, object]:
     return {
-        "writer_confirmed_product_fact_refs": [
-            str(item["fact_ref"]) for item in confirmed_product_facts
-        ],
+        "writer_confirmed_product_fact_refs": [str(item["fact_ref"]) for item in confirmed_product_facts],
         "used_persona_quote_ids": sorted(persona_quote_ids),
     }
 
@@ -289,9 +283,7 @@ def _writer_truth_and_persona_instruction(
             "其中的商品名、品类、主色和其他已列字段；不得改值、换成未列值或据此补出 L1 具体信息"
             "与保证。信息完整性要求：一旦写某个字段已经确认，"
             "必须同时说出 confirmed_product_facts 中的实际值，不能只写‘主色已经确认’却隐去颜色。"
-            "当前真值："
-            + json.dumps(confirmed_product_facts, ensure_ascii=False, sort_keys=True)
-            + "。\n"
+            "当前真值：" + json.dumps(confirmed_product_facts, ensure_ascii=False, sort_keys=True) + "。\n"
         )
     judgment = ""
     if request.product_decision_basis is not None:
@@ -344,8 +336,26 @@ _CREATOR_ACTOR_ID = "actor:creator"
 _CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
 _ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 
+
+def _provider_error_identity(response: httpx.Response) -> tuple[str, str]:
+    error_code = ""
+    error_type = ""
+    try:
+        error_body = response.json()
+        if isinstance(error_body, dict):
+            raw_error = error_body.get("error")
+            if isinstance(raw_error, dict):
+                if isinstance(raw_error.get("code"), str):
+                    error_code = str(raw_error["code"])
+                if isinstance(raw_error.get("type"), str):
+                    error_type = str(raw_error["type"])
+    except (TypeError, ValueError):
+        pass
+    return error_code, error_type
+
 ProviderFailureKind = Literal[
     "transport_no_response",
+    "transport_empty_5xx",
     "http_unavailable_response",
     "http_rejection_response",
     "invalid_response",
@@ -369,6 +379,7 @@ class ProviderRequestFailure(GenerationFailed):
     ) -> None:
         classifications = {
             "transport_no_response": ("PROVIDER_TRANSPORT_FAILED", "transport", True),
+            "transport_empty_5xx": ("PROVIDER_TRANSPORT_FAILED", "transport", True),
             "http_unavailable_response": ("PROVIDER_UNAVAILABLE", "provider", True),
             "http_rejection_response": ("PROVIDER_REQUEST_REJECTED", "provider", False),
             "invalid_response": ("PROVIDER_INVALID_RESPONSE", "provider", True),
@@ -795,8 +806,14 @@ class DeepSeekGenerator(ContentGenerator):
         reviewer_provider: ReviewerProvider | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
+        transport_max_retries: int | None = None,
         status_tracker: ProviderStatusTracker | None = None,
     ) -> None:
+        if max_retries < 0:
+            raise ValueError("content max retries cannot be negative")
+        resolved_transport_retries = max_retries if transport_max_retries is None else transport_max_retries
+        if resolved_transport_retries not in {0, 1, 2}:
+            raise ValueError("transport max retries must be between zero and two")
         self._api_base_url = api_base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
@@ -804,8 +821,17 @@ class DeepSeekGenerator(ContentGenerator):
         self._reviewer_model = reviewer_provider.model_name if reviewer_provider is not None else None
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
+        self._transport_max_retries = resolved_transport_retries
         self._status_tracker = status_tracker
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
+
+    def _http_client(self, timeout_seconds: float | None = None) -> httpx.Client:
+        # The configured provider is a mainland endpoint. Inheriting workstation proxy
+        # variables can incorrectly send it through a cross-border SOCKS tunnel.
+        return httpx.Client(
+            timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds),
+            trust_env=False,
+        )
 
     @property
     def model_name(self) -> str:
@@ -4892,7 +4918,7 @@ CreativePlanV2：{
             },
         }
         try:
-            with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+            with self._http_client(timeout_seconds) as client:
                 response = client.post(
                     self._strict_review_api_url(),
                     headers={"Authorization": f"Bearer {self._api_key}"},
@@ -4992,7 +5018,7 @@ CreativePlanV2：{
             },
         }
         try:
-            with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+            with self._http_client(timeout_seconds) as client:
                 response = client.post(
                     self._strict_review_api_url(),
                     headers={"Authorization": f"Bearer {self._api_key}"},
@@ -5063,7 +5089,7 @@ CreativePlanV2：{
         thinking_disabled: bool = True,
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
-        retries = 0
+        transport_retries = 0
         request_payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
@@ -5076,7 +5102,7 @@ CreativePlanV2：{
         }
         if thinking_disabled:
             request_payload["thinking"] = {"type": "disabled"}
-        with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+        with self._http_client(timeout_seconds) as client:
             while True:
                 try:
                     response = client.post(
@@ -5091,68 +5117,58 @@ CreativePlanV2：{
                                 "模型返回无效",
                                 kind="invalid_response",
                                 response_received=True,
-                                retry_count=retries,
+                                retry_count=transport_retries,
                             )
                         if self._status_tracker is not None:
                             self._status_tracker.record("available")
-                        return result, retries
-                    if response.status_code != 429 and not 500 <= response.status_code < 600:
-                        error_code = ""
-                        error_type = ""
-                        try:
-                            error_body = response.json()
-                            if isinstance(error_body, dict):
-                                raw_error = error_body.get("error")
-                                if isinstance(raw_error, dict):
-                                    raw_code = raw_error.get("code")
-                                    if isinstance(raw_code, str):
-                                        error_code = raw_code
-                                    raw_type = raw_error.get("type")
-                                    if isinstance(raw_type, str):
-                                        error_type = raw_type
-                        except (TypeError, ValueError):
-                            pass
-                        state = _provider_rejection_state(
-                            response.status_code,
-                            error_code,
-                            error_type,
-                        )
-                        _LOGGER.warning(
-                            "model request rejected: status=%s code=%s category=%s",
-                            response.status_code,
-                            error_code or "unspecified",
-                            error_type or "unspecified",
-                        )
-                        if self._status_tracker is not None and state is not None:
-                            self._status_tracker.record(state)
-                        raise ProviderRequestFailure(
-                            "模型服务拒绝当前请求",
-                            kind="http_rejection_response",
-                            response_received=True,
-                            retry_count=retries,
-                        )
-                    if retries >= self._max_retries:
-                        if self._status_tracker is not None:
-                            self._status_tracker.record("degraded" if response.status_code == 429 else "unavailable")
-                        raise ProviderRequestFailure(
-                            "模型服务暂时不可用",
-                            kind="http_unavailable_response",
-                            response_received=True,
-                            retry_count=retries,
-                        )
-                    delay = self._retry_delay(response.headers.get("Retry-After"), retries)
+                        return result, transport_retries
+                    if 500 <= response.status_code < 600 and not response.content:
+                        if transport_retries >= self._transport_max_retries:
+                            if self._status_tracker is not None:
+                                self._status_tracker.record("unavailable")
+                            raise ProviderRequestFailure(
+                                "模型服务返回空的暂时错误响应",
+                                kind="transport_empty_5xx",
+                                response_received=True,
+                                retry_count=transport_retries,
+                            )
+                        delay = self._retry_delay(response.headers.get("Retry-After"), transport_retries)
+                        transport_retries += 1
+                        time.sleep(delay)
+                        continue
+                    error_code, error_type = _provider_error_identity(response)
+                    state = _provider_rejection_state(
+                        response.status_code,
+                        error_code,
+                        error_type,
+                    )
+                    _LOGGER.warning(
+                        "model request rejected: status=%s code=%s category=%s",
+                        response.status_code,
+                        error_code or "unspecified",
+                        error_type or "unspecified",
+                    )
+                    if self._status_tracker is not None and state is not None:
+                        self._status_tracker.record(state)
+                    unavailable = response.status_code == 429 or 500 <= response.status_code < 600
+                    raise ProviderRequestFailure(
+                        "模型服务暂时不可用" if unavailable else "模型服务拒绝当前请求",
+                        kind="http_unavailable_response" if unavailable else "http_rejection_response",
+                        response_received=True,
+                        retry_count=transport_retries,
+                    )
                 except httpx.TransportError as exc:
-                    if retries >= self._max_retries:
+                    if transport_retries >= self._transport_max_retries:
                         if self._status_tracker is not None:
                             self._status_tracker.record("unavailable")
                         raise ProviderRequestFailure(
                             "模型网络请求失败",
                             kind="transport_no_response",
                             response_received=False,
-                            retry_count=retries,
+                            retry_count=transport_retries,
                         ) from exc
-                    delay = min(4.0, 0.5 * (2**retries))
-                retries += 1
+                    delay = min(4.0, 0.5 * (2**transport_retries))
+                transport_retries += 1
                 time.sleep(delay)
 
     @staticmethod

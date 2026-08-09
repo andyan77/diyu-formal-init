@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import re
+import socket
+import ssl
 from pathlib import Path
+from urllib.parse import urlsplit
 
 AUTHORIZED_KEYS = (
     "DEEPSEEK_API_BASE_URL",
@@ -11,6 +14,44 @@ AUTHORIZED_KEYS = (
     "DEEPSEEK_MODEL",
 )
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+class ProviderHandshakeError(RuntimeError):
+    """Fail closed before the formal suite spends a provider request."""
+
+
+def probe_provider_tcp_tls(
+    api_base_url: str,
+    *,
+    timeout_seconds: float = 5.0,
+) -> dict[str, object]:
+    """Prove direct TCP/TLS reachability without sending a completion request."""
+
+    parsed = urlsplit(api_base_url)
+    host = parsed.hostname or ""
+    if parsed.scheme != "https" or not host:
+        raise ProviderHandshakeError("provider base URL must name one HTTPS host")
+    if host != "aliyuncs.com" and not host.endswith(".aliyuncs.com"):
+        raise ProviderHandshakeError("provider host is outside the authorized mainland endpoint")
+    port = parsed.port or 443
+    try:
+        # A raw socket deliberately ignores HTTP(S)/ALL_PROXY from the workstation.
+        with socket.create_connection((host, port), timeout=timeout_seconds) as connection:
+            context = ssl.create_default_context()
+            with context.wrap_socket(connection, server_hostname=host) as tls_connection:
+                tls_version = tls_connection.version() or "unknown"
+    except (OSError, ssl.SSLError) as exc:
+        raise ProviderHandshakeError("provider TCP/TLS handshake failed") from exc
+    return {
+        "completion_requests": 0,
+        "host": host,
+        "port": port,
+        "probe_version": "gate-d-provider-tcp-tls-v1",
+        "provider_budget_consumed": 0,
+        "status": "PASS",
+        "tls": True,
+        "tls_version": tls_version,
+    }
 
 
 def _value(raw: str) -> str:

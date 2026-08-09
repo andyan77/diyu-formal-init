@@ -122,10 +122,12 @@ class FakeResponse:
         status_code: int,
         payload: dict[str, Any],
         headers: dict[str, str] | None = None,
+        content: bytes | None = None,
     ) -> None:
         self.status_code = status_code
         self._payload = payload
         self.headers = headers or {}
+        self.content = json.dumps(payload).encode() if content is None else content
 
     def json(self) -> dict[str, Any]:
         return self._payload
@@ -134,9 +136,10 @@ class FakeResponse:
 class FakeClient:
     responses: list[FakeResponse] = []
     requests: list[dict[str, object]] = []
+    init_kwargs: list[dict[str, object]] = []
 
-    def __init__(self, **_: object) -> None:
-        pass
+    def __init__(self, **kwargs: object) -> None:
+        self.init_kwargs.append(kwargs)
 
     def __enter__(self) -> FakeClient:
         return self
@@ -222,16 +225,22 @@ class FakeReviewerProvider(ReviewerProvider):
 def _fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.responses = []
     FakeClient.requests = []
+    FakeClient.init_kwargs = []
     monkeypatch.setattr(httpx, "Client", FakeClient)
 
 
-def _generator(*, max_retries: int = 0) -> DeepSeekGenerator:
+def _generator(
+    *,
+    max_retries: int = 0,
+    transport_max_retries: int = 0,
+) -> DeepSeekGenerator:
     return DeepSeekGenerator(
         "https://example.invalid",
         "test-key",
         "deepseek-test",
         reviewer_provider=FakeReviewerProvider(),
         max_retries=max_retries,
+        transport_max_retries=transport_max_retries,
     )
 
 
@@ -1193,10 +1202,7 @@ def _gate_d_s04_product_boundary() -> tuple[
 def test_publication_v3_allows_confirmed_v_facts_and_prior_s04_response() -> None:
     context, basis = _gate_d_s04_product_boundary()
     raw = json.loads(
-        (
-            Path(__file__).parent
-            / "fixtures/gated_s04_p2_rejected_writer_output_v1.json"
-        ).read_text(encoding="utf-8")
+        (Path(__file__).parent / "fixtures/gated_s04_p2_rejected_writer_output_v1.json").read_text(encoding="utf-8")
     )
     output = WriterOutputV3(
         output_version=WRITER_OUTPUT_VERSION,
@@ -1212,9 +1218,7 @@ def test_publication_v3_allows_confirmed_v_facts_and_prior_s04_response() -> Non
         product_basis=basis,
     )
 
-    assert raw["prior_response_sha256"] == (
-        "4cb0ed314c93957a046f5447e7c349565de3f8f3089f8ffdabaf61ad444de33f"
-    )
+    assert raw["prior_response_sha256"] == ("4cb0ed314c93957a046f5447e7c349565de3f8f3089f8ffdabaf61ad444de33f")
     assert raw["review_only_excerpts"] == [
         "它提供的是层次感",
         "在店里整理货架的时候",
@@ -1269,10 +1273,7 @@ def test_publication_v3_allows_l2_soft_experience_words(
 def test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt() -> None:
     context, basis = _gate_d_s04_product_boundary()
     raw = json.loads(
-        (
-            Path(__file__).parent
-            / "fixtures/gated_s01_p1_rejected_writer_output_v2.json"
-        ).read_text(encoding="utf-8")
+        (Path(__file__).parent / "fixtures/gated_s01_p1_rejected_writer_output_v2.json").read_text(encoding="utf-8")
     )
     output = WriterOutputV3(
         output_version=WRITER_OUTPUT_VERSION,
@@ -1288,9 +1289,7 @@ def test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt() -> None:
         product_basis=basis,
     )
 
-    assert raw["prior_response_sha256"] == (
-        "1ea7e83c9c5241511ee3ea07a0b9684b90994d1d6022e8009082125a26af1d64"
-    )
+    assert raw["prior_response_sha256"] == ("1ea7e83c9c5241511ee3ea07a0b9684b90994d1d6022e8009082125a26af1d64")
     assert raw["founder_classification"] == "L2_soft_experience_allowed"
 
 
@@ -1324,10 +1323,9 @@ def test_publication_v3_allows_ambiguous_daily_suggestion_words(
 def test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive() -> None:
     context, basis = _gate_d_s04_product_boundary()
     raw = json.loads(
-        (
-            Path(__file__).parent
-            / "fixtures/gated_s01_p2_absolute_claim_false_positive_v1.json"
-        ).read_text(encoding="utf-8")
+        (Path(__file__).parent / "fixtures/gated_s01_p2_absolute_claim_false_positive_v1.json").read_text(
+            encoding="utf-8"
+        )
     )
     excerpt = str(raw["machine_boundary_excerpt"])
     output = WriterOutputV3(
@@ -1344,19 +1342,14 @@ def test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive() -> N
         context=context,
         product_basis=basis,
     )
-    assert raw["prior_response_sha256"] == (
-        "b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004"
-    )
+    assert raw["prior_response_sha256"] == ("b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004")
     assert raw["founder_classification"] == "L3_daily_suggestion_allowed"
 
 
 def test_publication_v3_allows_prior_s05_r01_negated_performance_boundary() -> None:
     context, basis = _gate_d_s04_product_boundary()
     raw = json.loads(
-        (
-            Path(__file__).parent
-            / "fixtures/gated_s05_r01_p1_negated_performance_v1.json"
-        ).read_text(encoding="utf-8")
+        (Path(__file__).parent / "fixtures/gated_s05_r01_p1_negated_performance_v1.json").read_text(encoding="utf-8")
     )
     excerpt = str(raw["machine_boundary_excerpt"])
     assert excerpt == "如果你需要的是防风防水的功能外套，那它就不是那个答案"
@@ -1375,9 +1368,7 @@ def test_publication_v3_allows_prior_s05_r01_negated_performance_boundary() -> N
         product_basis=basis,
     )
     assert raw["prior_guard_match"] == "guaranteed_performance_assertion:防水"
-    assert raw["prior_response_sha256"] == (
-        "52e4e3a0ec2a73db75e28f16888dcbe859fccb77bb82a85abf8b3deaf0d51798"
-    )
+    assert raw["prior_response_sha256"] == ("52e4e3a0ec2a73db75e28f16888dcbe859fccb77bb82a85abf8b3deaf0d51798")
 
 
 def test_bare_performance_terms_are_non_blocking_review_annotations() -> None:
@@ -1392,10 +1383,7 @@ def test_bare_performance_terms_are_non_blocking_review_annotations() -> None:
     )
 
     assert unconfirmed_product_specificity_spans(text) == ()
-    assert [
-        (annotation.term, annotation.sentence)
-        for annotation in performance_term_review_annotations(text)
-    ] == [
+    assert [(annotation.term, annotation.sentence) for annotation in performance_term_review_annotations(text)] == [
         ("防水", text),
         ("耐磨", text),
     ]
@@ -1485,9 +1473,7 @@ def test_publication_v3_product_prompt_exposes_confirmed_values_and_keeps_j_cond
             prior_output=None,
             revision_instruction=None,
         ),
-        product_decision_basis={
-            "applicability_conditions": list(basis.applicability_conditions)
-        },
+        product_decision_basis={"applicability_conditions": list(basis.applicability_conditions)},
     )
     projection = DeepSeekGenerator._confirmed_product_fact_projection(
         context.product_fact_packet,
@@ -1572,9 +1558,7 @@ def test_publication_v3_freezes_authorized_persona_quote_id_in_snapshot() -> Non
     artifact = _generator().generate(request)
 
     assert artifact.completion_snapshot_patch is not None
-    assert artifact.completion_snapshot_patch["used_persona_quote_ids"] == [
-        quote_id
-    ]
+    assert artifact.completion_snapshot_patch["used_persona_quote_ids"] == [quote_id]
 
 
 def _kernel_writer(
@@ -2903,22 +2887,90 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
     assert {record.exact_text for record in context.fact_registry if record.fact_kind == "product"} == set(claims)
 
 
-def test_route_and_transport_only_retry_429_or_transport(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_provider_nonempty_error_response_is_never_transport_retried() -> None:
     FakeClient.responses = [
         FakeResponse(429, {}, {"Retry-After": "0"}),
         _completion({"primary_value": "建立人格"}),
     ]
-    monkeypatch.setattr("src.tool.llm_gateway.deepseek.time.sleep", lambda _: None)
-    result = _generator(max_retries=1).route(
-        RoutingInput(
-            "今天不知道发什么，帮我做条小红书。",
-            _brand(),
-            (),
-        )
+
+    with pytest.raises(ProviderRequestFailure) as captured:
+        _generator(transport_max_retries=2)._request("system", "prompt", 20)
+
+    assert captured.value.kind == "http_unavailable_response"
+    assert captured.value.response_received is True
+    assert captured.value.retry_count == 0
+    assert len(FakeClient.requests) == 1
+    assert len(FakeClient.responses) == 1
+
+
+def test_provider_valid_content_response_is_never_retried() -> None:
+    accepted = _completion({"primary_value": "建立人格"})
+    FakeClient.responses = [
+        accepted,
+        _completion({"primary_value": "解释商品"}),
+    ]
+
+    response, retries = _generator(transport_max_retries=2)._request(
+        "system", "prompt", 20
     )
+
+    assert response is accepted._payload
+    assert retries == 0
+    assert len(FakeClient.requests) == 1
+    assert len(FakeClient.responses) == 1
+
+
+def test_provider_client_ignores_polluted_proxy_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALL_PROXY", "socks5h://172.18.80.1:16005")
+    monkeypatch.setenv("HTTPS_PROXY", "http://172.18.80.1:16005")
+    FakeClient.responses = [_completion({"primary_value": "建立人格"})]
+
+    result = _generator().route(RoutingInput("今天不知道发什么，帮我做条小红书。", _brand(), ()))
+
     assert result == "brand_life_narrative"
+    assert FakeClient.init_kwargs[0]["trust_env"] is False
+
+
+def test_provider_transport_failure_retries_then_returns_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses: list[FakeResponse | httpx.TransportError] = [
+        httpx.ConnectError("synthetic transport failure"),
+        _completion({"primary_value": "建立人格"}),
+    ]
+
+    class RetryClient(FakeClient):
+        def post(self, *_: object, **kwargs: object) -> FakeResponse:
+            self.requests.append(kwargs)
+            response = responses.pop(0)
+            if isinstance(response, httpx.TransportError):
+                raise response
+            return response
+
+    monkeypatch.setattr(httpx, "Client", RetryClient)
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.time.sleep", lambda _: None)
+
+    response, retries = _generator(transport_max_retries=2)._request("system", "prompt", 20)
+
+    assert response["choices"]
+    assert retries == 1
+    assert len(FakeClient.requests) == 2
+
+
+def test_provider_empty_5xx_retries_but_nonempty_5xx_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeClient.responses = [
+        FakeResponse(503, {}, content=b""),
+        _completion({"primary_value": "建立人格"}),
+    ]
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.time.sleep", lambda _: None)
+
+    _, retries = _generator(transport_max_retries=2)._request("system", "prompt", 20)
+
+    assert retries == 1
     assert len(FakeClient.requests) == 2
 
 
