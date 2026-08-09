@@ -54,6 +54,7 @@ from src.shared.factual_basis import (
     build_product_fact_packet,
     product_fact_records,
     select_product_fact_block_ids,
+    unconfirmed_product_specificity_spans,
 )
 from src.shared.media_program import (
     build_media_capability_envelope,
@@ -1293,6 +1294,62 @@ def test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt() -> None:
 
 
 @pytest.mark.parametrize(
+    "suggestion_text",
+    (
+        "整套搭配里最好不要再出现第二个强色。",
+        "先看这一眼。",
+    ),
+)
+def test_publication_v3_allows_ambiguous_daily_suggestion_words(
+    suggestion_text: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="先看搭配条件",
+        natural_guide="日常建议不是商品品质的超级断言。",
+        creative_body=suggestion_text,
+        publication_caption="按整套搭配的实际情况决定。",
+    )
+
+    assert unconfirmed_product_specificity_spans(suggestion_text) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+def test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/gated_s01_p2_absolute_claim_false_positive_v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    excerpt = str(raw["machine_boundary_excerpt"])
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="把强色留给主角",
+        natural_guide="条件建议保持在整套搭配侧。",
+        creative_body=excerpt,
+        publication_caption="按自己的整套搭配决定。",
+    )
+
+    assert unconfirmed_product_specificity_spans(excerpt) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+    assert raw["prior_response_sha256"] == (
+        "b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004"
+    )
+    assert raw["founder_classification"] == "L3_daily_suggestion_allowed"
+
+
+@pytest.mark.parametrize(
     "unsupported_text",
     (
         "这件商品的主色是黑色。",
@@ -1302,9 +1359,10 @@ def test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt() -> None:
         "适穿年龄为3—12岁。",
         "这件商品不起球，而且亲肤透气。",
         "这件商品保证耐穿。",
-        "这是同类最耐穿的一件。",
-        "这件商品100%好打理。",
+        "这件商品保证不起球。",
+        "这件商品100%纯棉。",
         "这件商品永不变形。",
+        "这件商品绝不掉色。",
     ),
 )
 def test_publication_v3_rejects_changed_or_unconfirmed_product_specifics(
@@ -1359,8 +1417,11 @@ def test_publication_v3_product_prompt_exposes_confirmed_values_and_keeps_j_cond
     assert "针织开衫" in prompt
     assert "灰色" in prompt
     assert "主色已经确认’却隐去颜色" in prompt
-    assert "ADJ-WRITER-BOUNDARY-03 三层制" in prompt
+    assert "ADJ-WRITER-BOUNDARY-04 三层制" in prompt
     assert "L1 硬断言" in prompt
+    assert "100%／永不／绝不" in prompt
+    assert "最舒适／业内第一／全网最好" in prompt
+    assert "最好不要／最好先／第一眼" in prompt
     assert "L2 是不取得事实资格的软性体验表达" in prompt
     assert "耐穿／百搭／好打理／显精神" in prompt
     assert "不得写入 ProductFact" in prompt

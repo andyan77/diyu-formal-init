@@ -291,7 +291,7 @@ def _assert_media() -> str:
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
     if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v4"
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v5"
         or contract.get("expected_counts")
         != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
     ):
@@ -300,10 +300,10 @@ def _assert_formal_suite_contract() -> None:
     if (
         constraints.get("maximum_provider_requests") != 80
         or constraints.get("maximum_transport_retries") != 0
-        or constraints.get("prior_provider_requests") != 8
+        or constraints.get("prior_provider_requests") != 10
         or constraints.get("temperature") != 0
         or constraints.get("writer_assertion_policy")
-        != "ADJ-WRITER-BOUNDARY-03-L1-L2-L3"
+        != "ADJ-WRITER-BOUNDARY-04-EXACT-ABSOLUTE"
     ):
         raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
     cards = cast(list[dict[str, Any]], contract.get("cards"))
@@ -360,9 +360,12 @@ def _assert_formal_suite_contract() -> None:
             '"age_range"',
             '"guaranteed_performance_assertion"',
             '"absolute_claim"',
+            "(?:永不|绝不)",
         ),
         "Writer factual boundary",
     )
+    if "(?:全网|行业|同类|史上|市面上)?最" in factual_boundary:
+        raise SystemExit("Gate D semantics FAIL: ambiguous superlatives remain machine-blocked")
     writer = _source("src/tool/llm_gateway/deepseek.py")
     _require(
         writer,
@@ -371,7 +374,9 @@ def _assert_formal_suite_contract() -> None:
             "product_fact_value_conflicts(context.product_fact_packet, visible)",
             "unconfirmed_product_specificity_spans(visible)",
             "used_persona_quote_ids",
-            "ADJ-WRITER-BOUNDARY-03 三层制",
+            "ADJ-WRITER-BOUNDARY-04 三层制",
+            "最舒适／业内第一／全网最好",
+            "最好不要／最好先／第一眼",
             "L2 是不取得事实资格的软性体验表达",
             "不得写入 ProductFact",
             "如果你需要／如果你的条件是",
@@ -387,10 +392,14 @@ def _assert_formal_suite_contract() -> None:
         (
             "test_publication_v3_allows_l2_soft_experience_words",
             "test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt",
-            "这件商品保证耐穿",
-            "这是同类最耐穿的一件",
-            "这件商品100%好打理",
+            "test_publication_v3_allows_ambiguous_daily_suggestion_words",
+            "test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive",
+            "整套搭配里最好不要再出现第二个强色",
+            "先看这一眼",
+            "这件商品保证不起球",
+            "这件商品100%纯棉",
             "这件商品永不变形",
+            "这件商品绝不掉色",
         ),
         "Writer assertion-layer regression",
     )
