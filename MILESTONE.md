@@ -2102,3 +2102,19 @@
   provider。
 - 唯一下一动作：监理复核第六轮极性收口、非阻断标注、provider 失败安全、冻结纪律与
   ledger；继续须由主控另行签发。
+
+## BRAND-MATRIX-01 · Gate D 用户授权再次尝试后失败安全稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · PROVIDER_REQUEST_FAILURE`**；不得据此写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- 用户“再次尝试”已按完整套件执行，历史 42 次调用全部保留，不补跑旧卡、不拼接旧成品。
+- 新候选 `587bed9168e92db7444db81ba9123b92a80cbacf`；本地 `1048 passed / 2 skipped`，
+  CI run `31309326766` 四查全绿；两轮导入、媒体和输入指纹一致。
+- 本轮 `S01-P1` 成功落版；`S01-P2` 的唯一 provider 请求没有取得可接受响应，失败卡
+  task/run/version=`1/1/0`，后 13 卡未运行。本轮请求尝试 2，累计 `44/80`，transport retry 0、
+  失败后请求 0。
+- 只能确认 `ProviderRequestFailure`，现有脱敏证据不足以区分 HTTP 拒绝、服务暂时不可用或
+  传输失败；执行侧不臆测。首次请求后只追加文档证据，生产/SSH/ECS/alembic/密钥泄漏/
+  二进制入 Git 均为 0。
+- 唯一下一动作：监理复核两次 provider 失败，决定暂停等待恢复或另行签发服务诊断/重跑指令；
+  执行侧不再自动尝试。

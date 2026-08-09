@@ -4,250 +4,58 @@
     "not_run": 1,
     "pass_zero_provider": 5
   },
-  "cumulative_provider_request_count": 42,
+  "cumulative_provider_request_count": 44,
   "current_candidate_database_readback": {
     "failed_card_created_run": true,
     "failed_card_created_task": true,
     "failed_card_created_version": false,
-    "formal_run_count": 13,
-    "formal_succeeded_run_count": 12,
-    "formal_task_count": 13,
-    "formal_version_count": 12,
+    "formal_run_count": 2,
+    "formal_succeeded_run_count": 1,
+    "formal_task_count": 2,
+    "formal_version_count": 1,
     "writer_grounding_fields_committed_on_completed_versions": true
   },
   "current_candidate_suite_attempts": 1,
-  "current_completed_artifact_count": 12,
+  "current_completed_artifact_count": 1,
   "current_completed_artifact_index": [
     {
-      "body_digest": "85d49779d6764f2502330361b285198ccdfa066adb284a9f764a6d558ac4efe2",
+      "body_digest": "56e0bbda5cd0c54a67462e3299a9e46340478bead3ca7dff5f9eed2f2c94f2bb",
       "brand_relevance_family": "product_expertise",
       "card_id": "S01-P1",
       "performance_term_review_annotations": [],
-      "run_id": "b991133d-d83b-4c4e-a4ac-5b61a5d624ca",
-      "task_id": "b7ead39e-f4d8-4054-ad54-5bf2b18366e5",
+      "run_id": "b77710b6-9da3-45f2-97f2-fb781945d80a",
+      "task_id": "89ba36ea-fe5d-4932-ac55-0708f12d427e",
       "used_persona_quote_id_count": 0,
-      "version_id": "76e390ae-2eee-4d26-b796-dd3275c229ee",
+      "version_id": "e35d32ce-0789-4dc3-a749-2736db103b3b",
       "version_number": 1,
       "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "7d6ddbbf69d71feffcc9f9b4445d52da3a9dcfddf13c8a2aa15e39eaff3ea112",
-      "brand_relevance_family": "product_expertise",
-      "card_id": "S01-P2",
-      "performance_term_review_annotations": [
-        {
-          "annotation_kind": "bare_performance_term_review",
-          "blocking": false,
-          "card_id": "S01-P2",
-          "matched_term": "耐穿",
-          "sentence": "至于它耐不耐穿、好不好打理，这些我没有确切依据，不会给你保证。"
-        },
-        {
-          "annotation_kind": "bare_performance_term_review",
-          "blocking": false,
-          "card_id": "S01-P2",
-          "matched_term": "好打理",
-          "sentence": "至于它耐不耐穿、好不好打理，这些我没有确切依据，不会给你保证。"
-        }
-      ],
-      "run_id": "23677d13-f009-4231-8bd1-b31e758abdc5",
-      "task_id": "1be64956-1d41-4648-a94a-747b9c06b2ac",
-      "used_persona_quote_id_count": 0,
-      "version_id": "b2b2d4de-812d-4605-9fe7-dfa59798eeb6",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "d5773638380c2a3879bd619cd3c64b9caefadd107bcc483e18d04195ad2b4ff9",
-      "brand_relevance_family": "brand_visual",
-      "card_id": "S01-P5",
-      "performance_term_review_annotations": [],
-      "run_id": "dfb1a2da-e60d-4ad6-9e8c-4e69c1fd4780",
-      "task_id": "0c4c2390-f338-4ef3-ad64-dd22ce15d4bc",
-      "used_persona_quote_id_count": 0,
-      "version_id": "b5c3d004-29ad-4fb1-acbb-6d7c397dd87c",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 4
-    },
-    {
-      "body_digest": "22550d4d4f3111e187c51965d961efee25b3f8d135113436955da4cc9b90738a",
-      "brand_relevance_family": "local_trust",
-      "card_id": "S02-R01-P4",
-      "performance_term_review_annotations": [],
-      "run_id": "0bb478a8-cfcf-4137-bb2f-4a0d65b60b22",
-      "task_id": "9a9d5743-f291-46c1-9679-37ea23f515c0",
-      "used_persona_quote_id_count": 0,
-      "version_id": "9c447dac-d812-4206-be09-aa2d9801aee8",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 0
-    },
-    {
-      "body_digest": "8f95d6068209e27d4acba2b3e5d05194e420b080165e138badf68f5b27154414",
-      "brand_relevance_family": "local_trust",
-      "card_id": "S03-S01-P4",
-      "performance_term_review_annotations": [],
-      "run_id": "905ca2e7-922a-47e3-9108-19a75e2d9698",
-      "task_id": "0cd511f2-bf62-46a3-9652-3ce68eeabab0",
-      "used_persona_quote_id_count": 0,
-      "version_id": "a406f7b4-8cec-4a11-9404-d200e1ea35d1",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 0
-    },
-    {
-      "body_digest": "ea7f6464d109369ecf183591b980f86d055dc71c9d0cc81262f8e7ee8dfd3543",
-      "brand_relevance_family": "product_expertise",
-      "card_id": "S04-S04-P2",
-      "performance_term_review_annotations": [],
-      "run_id": "a7d1010b-1230-4517-8d5f-bde1497f4c01",
-      "task_id": "47b09b64-d910-4f54-8b30-fe55cde71f6f",
-      "used_persona_quote_id_count": 0,
-      "version_id": "10d585ec-e8e5-4fe1-9c83-cfeff74242fc",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "11f89668be75111dd8ec559302e44a9340fecaa486f3cb2396000654414f5ce7",
-      "brand_relevance_family": "product_expertise",
-      "card_id": "S05-H01-P1",
-      "performance_term_review_annotations": [
-        {
-          "annotation_kind": "bare_performance_term_review",
-          "blocking": false,
-          "card_id": "S05-H01-P1",
-          "matched_term": "百搭",
-          "sentence": "内容看点：如果你正在考虑这件女童灰色松弛针织开衫，先别急着想它有多百搭。"
-        }
-      ],
-      "run_id": "4b87a1f9-29ed-49d4-b42e-b2546abaeab8",
-      "task_id": "3ba7e65a-ab0c-4a1b-8ca4-d046ddf02adb",
-      "used_persona_quote_id_count": 0,
-      "version_id": "9552c8f0-7edf-46cd-a154-985d55e221b5",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "39804d3db21b12e7d78222523835e6912b6240741f642e0ce5eb26012fbab154",
-      "brand_relevance_family": "local_trust",
-      "card_id": "S05-R01-P1",
-      "performance_term_review_annotations": [],
-      "run_id": "aaad4a8e-c625-471e-a01a-f1092cc79d02",
-      "task_id": "b0086e9c-f51a-417e-a988-1c2a62fd526e",
-      "used_persona_quote_id_count": 0,
-      "version_id": "a3c1aa39-f0cb-457d-a016-8c3c05fbca4d",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "63c9d9404ddd3eca410bb0ed6c0d208b4314976251a9faf01a67d629fb7b426a",
-      "brand_relevance_family": "local_trust",
-      "card_id": "S05-S01-P1",
-      "performance_term_review_annotations": [],
-      "run_id": "ba4676c3-3a15-4fc6-a44c-8d6ea6f669b3",
-      "task_id": "65b0d64d-f7b4-4fe7-bfdf-6bd27bf737c0",
-      "used_persona_quote_id_count": 0,
-      "version_id": "582c07db-a6e0-4f3a-887a-e3010d8d64e3",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "0f69e3b89a3b427b6ef002de0184ed6e29b15e59a711bb8902df15293d94f874",
-      "brand_relevance_family": "local_trust",
-      "card_id": "S05-S04-P1",
-      "performance_term_review_annotations": [
-        {
-          "annotation_kind": "bare_performance_term_review",
-          "blocking": false,
-          "card_id": "S05-S04-P1",
-          "matched_term": "百搭",
-          "sentence": "灰色又是那么百搭，几乎能融进任何衣橱。"
-        }
-      ],
-      "run_id": "919666a4-8371-48bc-a0c9-a9f90d6516e7",
-      "task_id": "cdd9e7c4-61ec-4412-9ba1-68d6c1be4041",
-      "used_persona_quote_id_count": 0,
-      "version_id": "1956d75d-6795-4586-9c48-14c27e413eaa",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 3
-    },
-    {
-      "body_digest": "aa682b100101625bc6141d96028d5ad189f576c5112d29f9ed48f0dfccb31a46",
-      "brand_relevance_family": "audience_relationship",
-      "card_id": "S06-H01-P3",
-      "performance_term_review_annotations": [],
-      "run_id": "2471b21f-9f7e-4519-bbdf-3999fa24da61",
-      "task_id": "3d5e9605-9299-4037-a242-9c682923081d",
-      "used_persona_quote_id_count": 0,
-      "version_id": "c706efa9-6da3-4fdd-b226-4ebcbf6d65f2",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 0
-    },
-    {
-      "body_digest": "0a251c2c58ac245ed82b376405420fe817cc8b8970df9428cd43782de038af7e",
-      "brand_relevance_family": "local_trust",
-      "card_id": "S06-S02-P3",
-      "performance_term_review_annotations": [],
-      "run_id": "c246d9f8-254b-43e8-8824-7aef0345b46b",
-      "task_id": "0785a5c5-2a17-4652-9492-5743a4cd0136",
-      "used_persona_quote_id_count": 0,
-      "version_id": "8fc769e4-2499-41bb-9eb3-f42b0496d4e1",
-      "version_number": 1,
-      "writer_confirmed_product_fact_ref_count": 0
     }
   ],
-  "current_provider_request_count": 13,
-  "current_successful_response_count": 12,
+  "current_provider_request_count": 2,
+  "current_successful_response_count": 1,
   "failed_card": {
     "accepted_response_received": false,
-    "card_id": "S06-S04-P3",
+    "card_id": "S01-P2",
     "failure_code": "PROVIDER_REQUEST_FAILURE",
     "failure_stage": "provider_request",
     "provider_requests": 1,
     "response_or_transport_detail": "fail-closed runner persisted no provider response body; no retry was attempted",
-    "run_id": "54c00c77-fdd9-4147-b09e-e1625fcab26b",
-    "task_id": "cd68a6a1-429a-49d6-beb6-781dbe67bde7",
+    "run_id": "9b4654a3-846e-45eb-aa55-b401fee76414",
+    "task_id": "a407d19e-68d1-4b8b-b896-96fd9f2e7082",
     "version_id": null
   },
   "formal_binary_completion": false,
   "max_retries": 0,
   "model": "deepseek-v4-flash",
-  "performance_term_review_annotations": [
-    {
-      "annotation_kind": "bare_performance_term_review",
-      "blocking": false,
-      "card_id": "S01-P2",
-      "matched_term": "耐穿",
-      "sentence": "至于它耐不耐穿、好不好打理，这些我没有确切依据，不会给你保证。"
-    },
-    {
-      "annotation_kind": "bare_performance_term_review",
-      "blocking": false,
-      "card_id": "S01-P2",
-      "matched_term": "好打理",
-      "sentence": "至于它耐不耐穿、好不好打理，这些我没有确切依据，不会给你保证。"
-    },
-    {
-      "annotation_kind": "bare_performance_term_review",
-      "blocking": false,
-      "card_id": "S05-H01-P1",
-      "matched_term": "百搭",
-      "sentence": "内容看点：如果你正在考虑这件女童灰色松弛针织开衫，先别急着想它有多百搭。"
-    },
-    {
-      "annotation_kind": "bare_performance_term_review",
-      "blocking": false,
-      "card_id": "S05-S04-P1",
-      "matched_term": "百搭",
-      "sentence": "灰色又是那么百搭，几乎能融进任何衣橱。"
-    }
-  ],
+  "performance_term_review_annotations": [],
   "post_failure_reruns": 0,
-  "prior_provider_request_count": 29,
-  "private_evidence_path": "~/diyu-evidence-brand-matrix-gated-3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
-  "private_sha256s_digest": "8a030cd535f039ce3fa1efa2d1fd07204fbf2c3d3eba500eeb969775390b69c5",
+  "prior_provider_request_count": 42,
+  "private_evidence_path": "~/diyu-evidence-brand-matrix-gated-587bed9168e92db7444db81ba9123b92a80cbacf",
+  "private_sha256s_digest": "5011405886a88fb33308f92b132e4f8f3f5d456dfe9e1d64fc26cfa6587661a7",
   "provider_request_budget": 80,
   "provider_transport_retries": 0,
   "raw_responses_in_git": 0,
-  "registration_digest": "56a474986fa7eb7d32333f6244e7e0cc2304a483460cdda8bcbfb9da053e3449",
+  "registration_digest": "bc7846da9f16ec928d06e102bd558b2e00bcbbe8f8a7dd16b53116106af64896",
   "runtime_candidate_chain": [
     "997e6b55c1c40dacd44a46ff6617b28766011958",
     "f7e8e81c80ebc8552794f82aab81ef509e242b14",
@@ -255,16 +63,17 @@
     "596b87e7e9d0551c6b62834137e03eed2bf52c82",
     "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9",
     "e0dba46689397f16a967efbc126621df0683f385",
-    "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b"
+    "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
+    "587bed9168e92db7444db81ba9123b92a80cbacf"
   ],
-  "runtime_candidate_sha": "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
+  "runtime_candidate_sha": "587bed9168e92db7444db81ba9123b92a80cbacf",
   "scenario_summary": {
-    "artifact_cards_complete": 12,
+    "artifact_cards_complete": 1,
     "failed_safe_provider_request": 1,
-    "not_run_cards": 2,
+    "not_run_cards": 13,
     "scenario_level_pass": 0
   },
   "status": "FAILED_SAFE",
-  "suite_version": "brand-matrix-gate-d-formal-suite-v7",
+  "suite_version": "brand-matrix-gate-d-formal-suite-v8",
   "temperature": 0
 }

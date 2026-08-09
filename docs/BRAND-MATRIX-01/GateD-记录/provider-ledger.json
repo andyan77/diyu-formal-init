@@ -1,21 +1,21 @@
 {
   "current_failed_provider_request_count": 1,
-  "current_provider_request_count": 13,
-  "current_successful_response_count": 12,
+  "current_provider_request_count": 2,
+  "current_successful_response_count": 1,
   "failed_card_provider_request": {
     "accepted_response_received": false,
-    "card_id": "S06-S04-P3",
+    "card_id": "S01-P2",
     "error_type": "ProviderRequestFailure",
     "request_digest_persisted": false,
-    "request_index": 42,
+    "request_index": 44,
     "response_digest_persisted": false
   },
   "initial_runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
-  "ledger_version": "brand-matrix-gate-d-provider-ledger-v7-failed-safe",
-  "prior_provider_request_count": 29,
-  "prior_runtime_candidate_sha": "e0dba46689397f16a967efbc126621df0683f385",
+  "ledger_version": "brand-matrix-gate-d-provider-ledger-v8-failed-safe",
+  "prior_provider_request_count": 42,
+  "prior_runtime_candidate_sha": "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
   "provider_request_budget": 80,
-  "provider_request_count": 42,
+  "provider_request_count": 44,
   "records": [
     {
       "binary_result": "CARD_COMPLETE",
@@ -617,6 +617,36 @@
       "temperature": 0,
       "transport_retries": 0,
       "version_id": null
+    },
+    {
+      "binary_result": "CARD_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "card_id": "S01-P1",
+      "model": "deepseek-v4-flash",
+      "request_index": 43,
+      "request_sha256": "579358a749a40df4f2a6ad188893966f5f762608c7ba6276d796b3ca5ce37c7c",
+      "response_sha256": "2c17ce5b698a83b68142b1f665269ce37a13c4fc626b69d2d15d3554b30c37fe",
+      "run_id": "b77710b6-9da3-45f2-97f2-fb781945d80a",
+      "runtime_candidate_sha": "587bed9168e92db7444db81ba9123b92a80cbacf",
+      "task_id": "89ba36ea-fe5d-4932-ac55-0708f12d427e",
+      "temperature": 0,
+      "transport_retries": 0,
+      "version_id": "e35d32ce-0789-4dc3-a749-2736db103b3b"
+    },
+    {
+      "accepted_response_received": false,
+      "binary_result": "FAILED_SAFE_PROVIDER_REQUEST",
+      "card_id": "S01-P2",
+      "error_type": "ProviderRequestFailure",
+      "model": "deepseek-v4-flash",
+      "request_index": 44,
+      "request_sha256": null,
+      "response_sha256": null,
+      "run_id": "9b4654a3-846e-45eb-aa55-b401fee76414",
+      "runtime_candidate_sha": "587bed9168e92db7444db81ba9123b92a80cbacf",
+      "task_id": "a407d19e-68d1-4b8b-b896-96fd9f2e7082",
+      "temperature": 0,
+      "transport_retries": 0,
+      "version_id": null
     }
   ],
   "runtime_candidate_chain": [
@@ -626,9 +656,10 @@
     "596b87e7e9d0551c6b62834137e03eed2bf52c82",
     "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9",
     "e0dba46689397f16a967efbc126621df0683f385",
-    "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b"
+    "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
+    "587bed9168e92db7444db81ba9123b92a80cbacf"
   ],
-  "runtime_candidate_sha": "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
+  "runtime_candidate_sha": "587bed9168e92db7444db81ba9123b92a80cbacf",
   "status": "FAILED_SAFE",
   "transport_retry_count": 0
 }

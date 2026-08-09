@@ -1245,3 +1245,21 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   继续须由主控另行签发。
 
 <!-- BRAND-MATRIX-01-GATED-RERUN-06-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-USER-RETRY-FAILED-SAFE-START -->
+
+### Gate D 用户授权再次尝试后失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · PROVIDER_REQUEST_FAILURE`，不等于 Gate D 已实现或通过。
+
+- 用户“再次尝试”按完整套件解释：保留历史 42 次账本，不补跑旧失败卡、不拼接旧成品。
+- 新候选 `587bed9168e92db7444db81ba9123b92a80cbacf`；本地 `1048 passed / 2 skipped`，
+  CI run `31309326766` 四查通过；两轮导入与媒体资格复检无漂移。
+- 本轮 `S01-P1` 成功落版，`S01-P2` 的唯一 provider 请求失败；本轮请求 2、累计 `44/80`，
+  max_retries 0、失败后请求 0，后 13 卡未运行。
+- 当前只能确认 `ProviderRequestFailure`，不能进一步归因；产品代码、Prompt、生产、alembic、
+  密钥和二进制均无新增风险。
+- 唯一下一动作：监理复核两次 provider 失败，决定暂停等待或另行签发服务诊断/重跑指令。
+
+<!-- BRAND-MATRIX-01-GATED-USER-RETRY-FAILED-SAFE-END -->
