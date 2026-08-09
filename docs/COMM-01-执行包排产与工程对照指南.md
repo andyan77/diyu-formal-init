@@ -1061,3 +1061,21 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   merge-base(exe/brand-matrix-d, 主线)==`bd5a6bf`，主线本勘正后的治理提交不需并入执行分支。
   D0 定向解冻：API contracts / repository·service / TenantAdminApp 及对应测试（禁无关重构）。
   模型调用在 D0+导入+媒体资格预检+全工程门+CI 冻结之前一律禁止；当前模型调用累计 0。
+
+### Gate D 交付（EVIDENCE_BLOCKED）监理复验记录（2026-08-08）
+
+- 执行侧终态 `GATE-D EVIDENCE_BLOCKED · MEDIA_QUALIFICATION_INSUFFICIENT`——**复验判定：正确的
+  合同行为**（rev3 §5「未知授权不得按 PASS」+§5-5 P5 前置不满足→Writer 前停止，未烧一分预算）。
+- 监理独立复验全绿：全量套件亲跑 `1004 passed / 2 skipped` 退出码 0；`assert_gated_semantics`
+  实跑三 digest（batch `f15d0efe…`、对象指纹 `e48dc654…`、媒体 `ab81e01f…`）与报告逐字一致，
+  roots=10/carriers=20/accounts=30/entries=31/J=4/auth=2/masters=26/quarantined=26/
+  provider_requests=0；CI run `31273687743` 四查独立通过；冻结 Prompt 指纹复算一致；
+  劇本/异常 16 项逐条「机制 PASS／正式 NOT_RUN+原因」诚实登记；四层口径（存储/投影/快照
+  引用/成品 0）如实分列。
+- 媒体阻断根因（监理溯源 Windows 视频目录 V1 真源）：26 条视频**全部有儿童/青少年模特出镜**
+  （童装素材），person/child/third-party/platform-validity 四道证据门对全部 26 条为实质性
+  缺口，不存在「无人物捷径」。商品绑定池充足：四个已导入深度商品各有绑定视频
+  （V-001→CSPU-001、V-004/005→006、V-011→008、V-022/023→013）。
+- 处置：媒体权利属 founder 业务裁决，监理已将三选项分叉（演示范围授权/真实授权证据登记/
+  放弃本轮 P5）连同可确认的授权书草案提交 founder 裁决。裁决前 Gate D 保持
+  EVIDENCE_BLOCKED，模型预算冻结在 0。

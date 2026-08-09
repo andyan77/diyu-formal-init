@@ -1944,3 +1944,4 @@
 - 模型调用 0、生产接触 0；未导入 Gate A 的 31 条知识、10 个账号和两条真实授权，未制作
   母版。Gate D 才做隔离环境真实导入及八剧本重演。
 - 唯一下一动作：监理独立复验 Gate C；PASS 前不得推进后续 Gate。
+- 2026-08-08：Gate D 交付 `EVIDENCE_BLOCKED · MEDIA_QUALIFICATION_INSUFFICIENT`，监理复验判定为**正确合同行为**（确定性面全绿：1004/2、三 digest 逐字一致、CI 四查过、provider 0）；根因=26 条视频全部有儿童模特出镜，四道权利证据门实质性缺口；媒体权利分叉已呈 founder 裁决，裁决前预算冻结 0。
