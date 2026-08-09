@@ -17,6 +17,7 @@ from scripts.gated.provider_env import (
     probe_provider_tcp_tls,
 )
 from scripts.gated.run_formal_acceptance import (
+    INITIAL_RUNTIME_CANDIDATE_SHA,
     PRIOR_RUNTIME_CANDIDATE_SHA,
     EvidenceGenerator,
     _load_prior_ledger,
@@ -44,16 +45,27 @@ _RERUN03_FACT_ID = "fact:product:gated-rerun-03"
 
 
 def test_gate_d_full_retry_preserves_all_prior_provider_attempts() -> None:
-    candidate_sha, records = _load_prior_ledger(
-        Path("docs/BRAND-MATRIX-01/GateD-记录/provider-ledger.json"),
-        expected_count=44,
-    )
+    import json
 
-    assert candidate_sha == PRIOR_RUNTIME_CANDIDATE_SHA
-    assert len(records) == 44
-    assert records[-1]["card_id"] == "S01-P2"
-    assert records[-1]["binary_result"] == "FAILED_SAFE_PROVIDER_REQUEST"
-    assert records[-1]["response_sha256"] is None
+    document = json.loads(
+        Path("docs/BRAND-MATRIX-01/GateD-记录/provider-ledger.json").read_text(encoding="utf-8")
+    )
+    records = document["records"]
+
+    assert document["status"] == "PASS"
+    assert document["provider_request_count"] == 59
+    assert len(records) == 59
+    chain = document["runtime_candidate_chain"]
+    assert len(chain) == 10
+    assert chain[0] == INITIAL_RUNTIME_CANDIDATE_SHA
+    assert PRIOR_RUNTIME_CANDIDATE_SHA in chain
+    assert document["runtime_candidate_sha"] == chain[-1]
+    preserved = records[43]
+    assert preserved["request_index"] == 44
+    assert preserved["card_id"] == "S01-P2"
+    assert preserved["binary_result"] == "FAILED_SAFE_PROVIDER_REQUEST"
+    assert preserved["response_sha256"] is None
+    assert records[-1]["version_id"] is not None
 
 
 def test_gate_d_provider_handshake_is_direct_and_spends_no_request(
