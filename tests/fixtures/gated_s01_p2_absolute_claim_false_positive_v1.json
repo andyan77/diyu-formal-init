@@ -1,0 +1,9 @@
+{
+  "fixture_version": "gate-d-rerun-04-absolute-claim-regression-v1",
+  "source_task_id": "5c71339d-0cff-4d39-a4c5-8df17a82d789",
+  "source_run_id": "d7df9a05-9936-4331-adb8-b34c50bc5633",
+  "prior_response_sha256": "b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004",
+  "prior_guard_match": "absolute_claim:最好",
+  "machine_boundary_excerpt": "整套搭配里最好不要再出现第二个强色。",
+  "founder_classification": "L3_daily_suggestion_allowed"
+}

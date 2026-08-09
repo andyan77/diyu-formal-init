@@ -162,6 +162,23 @@ from src.shared.types import (
 )
 from src.shared.writer_request import WriterOutputV3
 
+
+def _with_product_judgment(
+    basis: ProductDecisionBasisRefV2,
+    contract: ProductValueContract,
+) -> ProductDecisionBasisRefV2:
+    if isinstance(contract, (P1ProductDecisionBasisV3, P2ProductDecisionBasisV2)):
+        return replace(
+            basis,
+            source_packet_digest=contract.source_packet_digest,
+            judgment_ref=contract.judgment_ref,
+            judgment_version=contract.judgment_version,
+            judgment_digest=contract.judgment_digest,
+            applicability_conditions=contract.applicability_conditions,
+        )
+    return replace(basis, source_packet_digest=contract.source_packet_digest)
+
+
 _NO_FROZEN_CONTEXT = "这条历史内容没有保留完整的创作条件，请按当前输入新建一条。"
 _MISSING_FROZEN_MATERIAL = "这条内容当时用到的参考素材已经不可用，请按当前输入新建一条。"
 _MISSING_FROZEN_PROFILE = "这条内容当时用到的账号表达画像已经读不到了，请按当前输入新建一条。"
@@ -928,25 +945,7 @@ class ContentService:
                 else None
             )
             if product_basis is not None and product_value_contract is not None:
-                product_basis = replace(
-                    product_basis,
-                    source_packet_digest=product_value_contract.source_packet_digest,
-                    judgment_ref=(
-                        product_value_contract.judgment_ref
-                        if isinstance(product_value_contract, P1ProductDecisionBasisV3)
-                        else None
-                    ),
-                    judgment_version=(
-                        product_value_contract.judgment_version
-                        if isinstance(product_value_contract, P1ProductDecisionBasisV3)
-                        else None
-                    ),
-                    applicability_conditions=(
-                        product_value_contract.applicability_conditions
-                        if isinstance(product_value_contract, P1ProductDecisionBasisV3)
-                        else ()
-                    ),
-                )
+                product_basis = _with_product_judgment(product_basis, product_value_contract)
             frozen_series = build_series_episode_contract(
                 series_context,
                 topic_origin=plan.topic_origin,

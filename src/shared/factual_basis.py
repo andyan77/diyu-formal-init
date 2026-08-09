@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
@@ -33,6 +34,111 @@ _PROHIBITED_PRODUCT_INFERENCES = (
     "comparison_conclusion",
     "actual_experience",
 )
+_LABELED_PRODUCT_VALUE_PATTERNS: dict[str, re.Pattern[str]] = {
+    "sku": re.compile(
+        r"(?:商品编号|型号|SKU)\s*(?:是|为|：|:)\s*[「『“\"']?"
+        r"(?P<value>DIYU-[A-Z0-9-]+)"
+    ),
+    "category": re.compile(
+        r"(?:品类|商品类型)\s*(?:是|为|：|:)\s*[「『“\"']?"
+        r"(?P<value>[^，。；;！？!?\n」』”\"']{1,24})"
+    ),
+    "main_color": re.compile(
+        r"(?:主色|主要颜色)\s*(?:是|为|：|:)\s*[「『“\"']?"
+        r"(?P<value>[\u4e00-\u9fffA-Za-z]{1,12}色)"
+    ),
+}
+_PERFORMANCE_REVIEW_TERMS = (
+    "不易变形",
+    "不会变形",
+    "不变形",
+    "不起球",
+    "好打理",
+    "显精神",
+    "不掉色",
+    "不褪色",
+    "防水",
+    "抗菌",
+    "耐穿",
+    "百搭",
+    "亲肤",
+    "透气",
+    "防风",
+    "保暖",
+    "显瘦",
+    "耐磨",
+    "抗皱",
+    "速干",
+    "舒适",
+    "掉色",
+    "褪色",
+    "缩水",
+    "磨损",
+    "过时",
+)
+_PERFORMANCE_REVIEW_TERM_PATTERN = "(?:" + "|".join(
+    re.escape(term) for term in _PERFORMANCE_REVIEW_TERMS
+) + ")"
+_PERFORMANCE_OUTCOME_AFTER_NEGATIVE_PREFIX_PATTERN = (
+    r"(?:起球|变形|防水|防风|抗菌|掉色|褪色|缩水|磨损|过时)"
+)
+_VISIBLE_SENTENCE_PATTERN = re.compile(r"[^。！？!?\n]+[。！？!?]?")
+_UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS: tuple[
+    tuple[str, re.Pattern[str]], ...
+] = (
+    (
+        "composition_percentage",
+        re.compile(
+            r"(?:棉|腈纶|羊毛|羊绒|涤纶|聚酯纤维|锦纶|氨纶|粘纤|莱赛尔|莫代尔|"
+            r"麻|真丝|成分|含量)[^，。；;！？!?\n]{0,16}?\d{1,3}(?:\.\d+)?\s*%|"
+            r"(?:100\s*%|百分之百)\s*(?:纯)?(?:棉|腈纶|羊毛|羊绒|涤纶|聚酯纤维|"
+            r"锦纶|氨纶|粘纤|莱赛尔|莫代尔|麻|真丝)"
+        ),
+    ),
+    (
+        "price_amount",
+        re.compile(r"(?:售价|价格|到手价|吊牌价|本店售价)?\s*[¥￥]?\s*\d+(?:\.\d+)?\s*元"),
+    ),
+    (
+        "exact_process",
+        re.compile(
+            r"全成型无缝针织|无缝一体成型|全成型针织|"
+            r"(?:工艺|制作工艺)\s*(?:是|为|：|:|采用)\s*[^，。；;！？!?\n]{2,24}"
+        ),
+    ),
+    (
+        "age_range",
+        re.compile(r"\d{1,2}\s*(?:—|-|~|～|至|到)\s*\d{1,2}\s*岁|全年龄段"),
+    ),
+    (
+        "guaranteed_performance_assertion",
+        re.compile(
+            rf"(?<!不)(?<!未)(?<!不能)(?<!无法)(?<!未能)保证\s*{_PERFORMANCE_REVIEW_TERM_PATTERN}|"
+            rf"(?<!不是)(?<!并非)绝对\s*{_PERFORMANCE_REVIEW_TERM_PATTERN}"
+        ),
+    ),
+    (
+        "absolute_claim",
+        re.compile(
+            rf"(?<!不是)(?<!并非)(?:100\s*%|百分之百)\s*{_PERFORMANCE_REVIEW_TERM_PATTERN}|"
+            rf"(?:永不|绝不)\s*{_PERFORMANCE_OUTCOME_AFTER_NEGATIVE_PREFIX_PATTERN}"
+        ),
+    ),
+)
+_NON_ASSERTIVE_PRODUCT_MARKERS = (
+    "未确认",
+    "没有确认",
+    "尚未确认",
+    "不能确认",
+    "无法确认",
+    "不确定",
+    "不要声称",
+    "不得声称",
+    "不作确定表述",
+    "不写成卖点",
+    "不会去说",
+    "是否",
+)
 
 
 @dataclass(frozen=True)
@@ -40,6 +146,12 @@ class FrozenFactRecord:
     fact_id: str
     exact_text: str
     fact_kind: FactKind
+
+
+@dataclass(frozen=True)
+class PerformanceTermReviewAnnotation:
+    term: str
+    sentence: str
 
 
 @dataclass(frozen=True)
@@ -249,6 +361,99 @@ def product_fact_literal_spans(
     )
 
 
+def product_fact_value_conflicts(
+    packet: ProductFactPacket,
+    text: str,
+) -> tuple[str, ...]:
+    """Return only unambiguous labeled claims that conflict with frozen values.
+
+    Exact confirmed values are intentionally legal in Writer prose.  This
+    guard stays conservative: it checks only labeled fields whose asserted
+    value can be compared deterministically, and leaves ambiguous language to
+    human review instead of inventing a semantic detector.
+    """
+
+    allowed_by_key: dict[str, set[str]] = {}
+    for item in packet.facts:
+        values = _product_fact_string_values(item.structured_value)
+        if values:
+            allowed_by_key.setdefault(item.fact_key, set()).update(values)
+    conflicts: list[str] = []
+    for fact_key, pattern in _LABELED_PRODUCT_VALUE_PATTERNS.items():
+        allowed = allowed_by_key.get(fact_key)
+        if not allowed:
+            continue
+        for match in pattern.finditer(text):
+            claimed = match.group("value").strip()
+            if claimed in allowed:
+                continue
+            conflicts.append(f"{fact_key}:{claimed}")
+    return tuple(dict.fromkeys(conflicts))
+
+
+def unconfirmed_product_specificity_spans(text: str) -> tuple[str, ...]:
+    """Return deterministic unsupported product specifics in visible prose.
+
+    The patterns deliberately cover only L1 forms that machines can identify
+    reliably: verifiable specifics, guaranteed performance claims and
+    absolute claims.  L2 experience language is intentionally outside this
+    detector and remains creative expression rather than ProductFact.  A
+    nearby disclosure such as ``未确认`` keeps a phrase legal because it is a
+    boundary statement, not a product claim.
+    """
+
+    violations: list[str] = []
+    for reason, pattern in _UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS:
+        for match in pattern.finditer(text):
+            if _is_non_assertive_product_mention(text, match.start()):
+                continue
+            violations.append(f"{reason}:{match.group(0).strip()}")
+    return tuple(dict.fromkeys(violations))
+
+
+def performance_term_review_annotations(
+    text: str,
+) -> tuple[PerformanceTermReviewAnnotation, ...]:
+    """Collect visible performance terms for non-blocking human review.
+
+    This channel deliberately does not infer polarity or product ownership. It
+    records the exact visible sentence so founder review can distinguish a
+    positive claim from a legitimate negative boundary without another
+    machine gate.
+    """
+
+    annotations: list[PerformanceTermReviewAnnotation] = []
+    seen: set[tuple[str, str]] = set()
+    for sentence_match in _VISIBLE_SENTENCE_PATTERN.finditer(text):
+        sentence = sentence_match.group(0).strip()
+        if not sentence:
+            continue
+        for term_match in re.finditer(_PERFORMANCE_REVIEW_TERM_PATTERN, sentence):
+            item = (term_match.group(0), sentence)
+            if item in seen:
+                continue
+            seen.add(item)
+            annotations.append(
+                PerformanceTermReviewAnnotation(term=item[0], sentence=item[1])
+            )
+    return tuple(annotations)
+
+
+def _product_fact_string_values(value: ProductFactValue) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return (str(value),)
+    if isinstance(value, tuple):
+        return tuple(item.strip() for item in value if item.strip())
+    return ()
+
+
+def _is_non_assertive_product_mention(text: str, start: int) -> bool:
+    prefix = text[max(0, start - 24) : start]
+    return any(marker in prefix for marker in _NON_ASSERTIVE_PRODUCT_MARKERS)
+
+
 def _product_packet_items(
     product: ProductFact,
 ) -> tuple[ProductFactPacketItem, ...]:
@@ -292,7 +497,7 @@ def _product_packet_items(
         ("material", "材质"),
         ("structure", "结构"),
         ("silhouette", "轮廓"),
-        ("observable_features", "可观察特征"),
+        ("observable_features", "可观察特征"), ("main_color", "主色"),
     ):
         value = facts.get(key)
         if isinstance(value, str) and value.strip():
@@ -300,7 +505,7 @@ def _product_packet_items(
                 "category"
                 if key == "category"
                 else "appearance"
-                if key in {"silhouette", "observable_features"}
+                if key in {"silhouette", "observable_features", "main_color"}
                 else "structure"
             )
             specs.append(

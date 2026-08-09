@@ -1,0 +1,333 @@
+{
+  "authorization_consumption": {
+    "authorization_fixtures": [
+      {
+        "authorization_id": "01ec9efb-7215-5973-8836-a31521fa654e",
+        "event_counts": {
+          "consumed": 1,
+          "released": 1,
+          "reserved": 2
+        },
+        "failed_run_released": true,
+        "fixture_scope": "DEMO-TEST",
+        "independent_task_rejected": true,
+        "occupies_persona_quote_library": false,
+        "same_lineage_v2_without_second_consumption": true,
+        "subject_ref": "DEMO-TEST-QUOTE-S02-01",
+        "v1_consumed_once": true
+      },
+      {
+        "authorization_id": "07fc129d-cf5c-5a4e-aa62-368fd23693b5",
+        "event_counts": {
+          "consumed": 1,
+          "released": 1,
+          "reserved": 2
+        },
+        "failed_run_released": true,
+        "fixture_scope": "DEMO-TEST",
+        "independent_task_rejected": true,
+        "occupies_persona_quote_library": false,
+        "same_lineage_v2_without_second_consumption": true,
+        "subject_ref": "DEMO-TEST-QUOTE-S04-01",
+        "v1_consumed_once": true
+      }
+    ],
+    "formal_persona_authorization_events": 0
+  },
+  "judgment_consumption": {
+    "judgments": [
+      {
+        "judgment_digest": "4ec8e8bc601514d3a4bcfa4c0e91bda0eb763f9e28fae26745aa098cdb2a4277",
+        "judgment_ref": "J-CSPU-001",
+        "judgment_version": "v1",
+        "sku": "DIYU-CSPU-001"
+      },
+      {
+        "judgment_digest": "f8474408a488245f44223a8c886fc5e2ebf86c5a664a4ba2f6a570fa0b57f727",
+        "judgment_ref": "J-CSPU-006",
+        "judgment_version": "v1",
+        "sku": "DIYU-CSPU-006"
+      },
+      {
+        "judgment_digest": "04fa599c441948746e43cba5dadd44051cc4407f24ffa51c318d4ae3962801cc",
+        "judgment_ref": "J-CSPU-008",
+        "judgment_version": "v1",
+        "sku": "DIYU-CSPU-008"
+      },
+      {
+        "judgment_digest": "3eb976788b196c5a8cab4d6061276ff3991af52a9c283a563240370f80c161d5",
+        "judgment_ref": "J-CSPU-013",
+        "judgment_version": "v1",
+        "sku": "DIYU-CSPU-013"
+      }
+    ],
+    "p1_consumers": 4,
+    "p2_consumers": 4
+  },
+  "provider_requests": 0,
+  "scope_consumption": {
+    "chengdu_positive": true,
+    "east_positive": true,
+    "expired_rk_ec_08_consumptions": 0,
+    "formal_task_snapshots": [
+      {
+        "account_code": "H01",
+        "claim_keys": [],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf"
+        ],
+        "provider_requests": 0,
+        "run_id": "9173a9c7-dba5-4e3d-8bb7-701a131d299f",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "667b8eb4-5b04-4b1b-981e-31674bc41604"
+      },
+      {
+        "account_code": "R01",
+        "claim_keys": [
+          "RK-EC-01",
+          "RK-EC-02",
+          "RK-EC-03",
+          "RK-EC-06",
+          "RK-EC-07"
+        ],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf",
+          "068079aa-7969-5c8a-ad68-87b2323467d1",
+          "94361d97-0a98-5bff-9854-cd88d2563335",
+          "df880436-b163-571a-aa5d-de2a9cfbed67",
+          "f5943fc7-2036-5fc4-a0ad-69ec1b3466ea",
+          "f457e73b-0016-5f90-b89b-ebe0fccef8d8"
+        ],
+        "provider_requests": 0,
+        "run_id": "1bde4e93-772d-4c9b-a5c6-561c7793748e",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "4cfc13b3-4dec-4f17-93fe-96fe1c99417f"
+      },
+      {
+        "account_code": "R02",
+        "claim_keys": [
+          "RK-SW-01",
+          "RK-SW-02",
+          "RK-SW-05",
+          "RK-SW-06"
+        ],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf",
+          "14d398ec-4246-5aea-87f5-ea8cb7ad5b15",
+          "3e34151e-b950-5a02-a774-7fed876300ca",
+          "8d3b873a-1f1d-5855-b9ad-3537c1c060df",
+          "b616eb71-55fd-5ff3-8948-67d8908f7efe"
+        ],
+        "provider_requests": 0,
+        "run_id": "2185d758-dfb2-4703-9516-94b6c1c69582",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "d6f698c5-a90d-4f1d-8dde-49387a4925c3"
+      },
+      {
+        "account_code": "S01",
+        "claim_keys": [
+          "RK-EC-01",
+          "RK-EC-02",
+          "RK-EC-03",
+          "RK-EC-06",
+          "RK-EC-07",
+          "SK-HZ-01",
+          "SK-HZ-02",
+          "SK-HZ-03",
+          "SK-HZ-04",
+          "SK-HZ-06"
+        ],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf",
+          "068079aa-7969-5c8a-ad68-87b2323467d1",
+          "94361d97-0a98-5bff-9854-cd88d2563335",
+          "df880436-b163-571a-aa5d-de2a9cfbed67",
+          "f5943fc7-2036-5fc4-a0ad-69ec1b3466ea",
+          "f457e73b-0016-5f90-b89b-ebe0fccef8d8",
+          "42b8c0ae-7cd1-5485-8502-cdc875278f0c",
+          "4aac52b0-bd41-5a0c-b9ac-bdecc138e69e",
+          "821ce833-34b0-5aa6-8914-3c27b182623f",
+          "ab3a18cd-c6ed-5c27-99bd-1053524e80a9",
+          "babc57eb-2e05-5566-95e4-a61311cd9420"
+        ],
+        "provider_requests": 0,
+        "run_id": "5e452a39-c1d3-4e82-8aff-94fd9d9cb1c1",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "64245609-e9dd-4a1a-816b-76596c252db7"
+      },
+      {
+        "account_code": "S02",
+        "claim_keys": [
+          "RK-EC-01",
+          "RK-EC-02",
+          "RK-EC-03",
+          "RK-EC-06",
+          "RK-EC-07",
+          "SK-HZ-01",
+          "SK-HZ-02",
+          "SK-HZ-03",
+          "SK-HZ-04",
+          "SK-HZ-06"
+        ],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf",
+          "068079aa-7969-5c8a-ad68-87b2323467d1",
+          "94361d97-0a98-5bff-9854-cd88d2563335",
+          "df880436-b163-571a-aa5d-de2a9cfbed67",
+          "f5943fc7-2036-5fc4-a0ad-69ec1b3466ea",
+          "f457e73b-0016-5f90-b89b-ebe0fccef8d8",
+          "42b8c0ae-7cd1-5485-8502-cdc875278f0c",
+          "4aac52b0-bd41-5a0c-b9ac-bdecc138e69e",
+          "821ce833-34b0-5aa6-8914-3c27b182623f",
+          "ab3a18cd-c6ed-5c27-99bd-1053524e80a9",
+          "babc57eb-2e05-5566-95e4-a61311cd9420",
+          "f170810e-742d-51d7-8448-ffcd69da0d4c"
+        ],
+        "provider_requests": 0,
+        "run_id": "3eef5df5-e889-4873-bd31-f903640706ca",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "d2dfc6c0-2d4a-46f5-bf60-31508fa78df9"
+      },
+      {
+        "account_code": "S03",
+        "claim_keys": [
+          "RK-EC-01",
+          "RK-EC-02",
+          "RK-EC-03",
+          "RK-EC-06",
+          "RK-EC-07",
+          "SK-HuZ-01",
+          "SK-HuZ-02",
+          "SK-HuZ-03",
+          "SK-HuZ-04"
+        ],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf",
+          "068079aa-7969-5c8a-ad68-87b2323467d1",
+          "94361d97-0a98-5bff-9854-cd88d2563335",
+          "df880436-b163-571a-aa5d-de2a9cfbed67",
+          "f5943fc7-2036-5fc4-a0ad-69ec1b3466ea",
+          "f457e73b-0016-5f90-b89b-ebe0fccef8d8",
+          "7d38732d-1418-5bcf-bee7-1f7d46036ead",
+          "c3b89247-e5bd-5dd6-843b-4e532174fe0f",
+          "d1c72805-375f-53b4-be19-494fb195ca5e",
+          "a9ca8144-8be8-5f14-b6bd-67bdfe114532"
+        ],
+        "provider_requests": 0,
+        "run_id": "1e874eef-79f8-481f-ba2b-bc4c716aeda3",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "81e48a6f-b553-4758-b845-32597ebfd860"
+      },
+      {
+        "account_code": "S04",
+        "claim_keys": [
+          "RK-SW-01",
+          "RK-SW-02",
+          "RK-SW-05",
+          "RK-SW-06",
+          "SK-CD-01",
+          "SK-CD-04"
+        ],
+        "projection_item_ids": [
+          "e173736f-ba02-55fa-b22f-e640349db83e",
+          "c6c4c022-b2df-547b-872b-35fd7f456c7e",
+          "46b98dcc-40d2-528a-9a54-5151deedea84",
+          "534668a0-b43f-5f48-af5e-d223a7de1aaf",
+          "14d398ec-4246-5aea-87f5-ea8cb7ad5b15",
+          "3e34151e-b950-5a02-a774-7fed876300ca",
+          "8d3b873a-1f1d-5855-b9ad-3537c1c060df",
+          "b616eb71-55fd-5ff3-8948-67d8908f7efe",
+          "8246d8c4-78dd-5d33-80db-81d134f8f06c",
+          "6a5dcca9-8c4c-5018-bec0-b0c698c19616",
+          "26162a89-44fe-5b48-8248-4b8beba06192"
+        ],
+        "provider_requests": 0,
+        "run_id": "bae2e03e-ca1f-4b6c-99e0-637cccd6d603",
+        "run_status": "failed_after_snapshot_proof",
+        "task_id": "ca0624a2-aaa3-421f-82e9-91dd50d5053f"
+      }
+    ],
+    "hangzhou_positive": true,
+    "headquarters_global_positive": true,
+    "huzhou_positive": true,
+    "observed_claims": {
+      "H01": [],
+      "R01": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07"
+      ],
+      "R02": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06"
+      ],
+      "S01": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "S02": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "S03": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HuZ-01",
+        "SK-HuZ-02",
+        "SK-HuZ-03",
+        "SK-HuZ-04"
+      ],
+      "S04": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06",
+        "SK-CD-01",
+        "SK-CD-04"
+      ]
+    },
+    "sibling_scope_leaks": 0,
+    "sichuan_positive": true
+  }
+}

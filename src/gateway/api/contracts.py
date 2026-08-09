@@ -582,6 +582,17 @@ class BrandPublicationProjectionItemRequest(BaseModel):
         "local_response",
         "visual_styling_story",
     ]] = Field(default_factory=list, max_length=5)
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"]
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    effective_at: datetime
+    expires_at: datetime | None = None
+    fact_subject: Literal[
+        "brand_identity",
+        "brand_positioning",
+        "audience_relationship",
+        "brand_expression",
+        "local_context",
+    ] | None = None
 
 
 class BrandPublicationProjectionCandidateRequest(BaseModel):
@@ -591,6 +602,15 @@ class BrandPublicationProjectionCandidateRequest(BaseModel):
         min_length=1,
         max_length=64,
     )
+
+
+class BrandFeedbackObservationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_task_id: UUID
+    source_version_id: UUID | None = None
+    source_account_id: UUID
+    observation_payload: dict[str, object] = Field(min_length=1, max_length=20)
 
 
 class MaterialMetadataVersionRequest(BaseModel):

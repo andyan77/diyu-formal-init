@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
@@ -84,6 +85,135 @@ from src.shared.version_integrity import (
     validate_version_content,
 )
 
+_CURRENT_PRODUCT_FACTS_SQL = """
+    SELECT product.id AS product_id,
+           product_version.id AS product_version_id,
+           product.sku, product_version.display_name,
+           product_version.facts, product_version.source_kind,
+           product_version.source_note,
+           product_version.version_number AS fact_version,
+           product_version.applicability,
+           judgment.title AS judgment_ref,
+           judgment_version.version_label AS judgment_version,
+           judgment_version.content AS judgment_content
+    FROM brand_products product
+    JOIN brand_product_versions product_version
+      ON product_version.tenant_id = product.tenant_id
+     AND product_version.brand_id = product.brand_id
+     AND product_version.product_id = product.id
+     AND product_version.id = product.current_version_id
+    LEFT JOIN brand_library_entries judgment
+      ON judgment.tenant_id = product.tenant_id
+     AND judgment.brand_id = product.brand_id
+     AND judgment.category = 'judgment'
+     AND judgment.title = product_version.source_note
+     AND judgment.status = 'active'
+    LEFT JOIN brand_library_entry_versions judgment_version
+      ON judgment_version.tenant_id = judgment.tenant_id
+     AND judgment_version.brand_id = judgment.brand_id
+     AND judgment_version.entry_id = judgment.id
+     AND judgment_version.id = judgment.current_version_id
+    JOIN content_accounts target_account
+      ON target_account.tenant_id = product.tenant_id
+     AND target_account.brand_id = product.brand_id
+     AND target_account.id = %s
+    JOIN content_accounts root_account
+      ON root_account.tenant_id = target_account.tenant_id
+     AND root_account.id = COALESCE(target_account.carrier_of_account_id, target_account.id)
+    WHERE product.tenant_id = %s AND product.brand_id = %s
+      AND product.status = 'active'
+      AND product.current_version_id IS NOT NULL
+      AND product.business_data_kind = 'formal_business_data'
+      AND target_account.enabled = true
+      AND root_account.enabled = true
+      AND (
+        product_version.visibility_scope = 'brand_all'
+        OR (
+          product_version.visibility_scope = 'organizations'
+          AND root_account.control_organization_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM unnest(product_version.scope_organization_ids) AS product_scope(organization_id)
+            WHERE organization_is_same_or_descendant(
+              product.tenant_id, root_account.control_organization_id, product_scope.organization_id
+            )
+          )
+        )
+        OR (
+          product_version.visibility_scope = 'headquarters'
+          AND root_account.control_organization_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM unnest(product_version.scope_organization_ids) AS product_scope(organization_id)
+            JOIN organizations scoped_organization
+              ON scoped_organization.tenant_id = product.tenant_id
+             AND scoped_organization.id = product_scope.organization_id
+             AND scoped_organization.organization_level = 'company'
+            WHERE product_scope.organization_id = root_account.control_organization_id
+          )
+        )
+      )
+    ORDER BY product.sku
+"""
+
+_FROZEN_PRODUCT_FACTS_SQL = """
+    SELECT product.id AS product_id, product.current_version_id AS product_version_id,
+           product.sku, product.display_name, product.facts,
+           product.source_kind, product.source_note,
+           product.fact_version, product.applicability,
+           judgment.title AS judgment_ref,
+           judgment_version.version_label AS judgment_version,
+           judgment_version.content AS judgment_content
+    FROM brand_products product
+    LEFT JOIN brand_library_entries judgment
+      ON judgment.tenant_id = product.tenant_id
+     AND judgment.brand_id = product.brand_id
+     AND judgment.category = 'judgment'
+     AND judgment.title = product.source_note
+     AND judgment.status = 'active'
+    LEFT JOIN brand_library_entry_versions judgment_version
+      ON judgment_version.tenant_id = judgment.tenant_id
+     AND judgment_version.brand_id = judgment.brand_id
+     AND judgment_version.entry_id = judgment.id
+     AND judgment_version.id = judgment.current_version_id
+    JOIN content_accounts target_account
+      ON target_account.tenant_id = product.tenant_id
+     AND target_account.brand_id = product.brand_id
+     AND target_account.id = %s
+    JOIN content_accounts root_account
+      ON root_account.tenant_id = target_account.tenant_id
+     AND root_account.id = COALESCE(target_account.carrier_of_account_id, target_account.id)
+    WHERE product.tenant_id = %s AND product.brand_id = %s
+      AND product.sku = ANY(%s)
+      AND product.business_data_kind = 'formal_business_data'
+      AND (
+        product.visibility_scope = 'brand_all'
+        OR (
+          root_account.control_organization_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM brand_product_scope_organizations product_scope
+            JOIN organizations scoped_organization
+              ON scoped_organization.tenant_id = product_scope.tenant_id
+             AND scoped_organization.id = product_scope.organization_id
+            WHERE product_scope.tenant_id = product.tenant_id
+              AND product_scope.product_id = product.id
+              AND (
+                (
+                  product.visibility_scope = 'organizations'
+                  AND organization_is_same_or_descendant(
+                    product.tenant_id, root_account.control_organization_id, product_scope.organization_id
+                  )
+                )
+                OR (
+                  product.visibility_scope = 'headquarters'
+                  AND scoped_organization.organization_level = 'company'
+                  AND product_scope.organization_id = root_account.control_organization_id
+                )
+              )
+          )
+        )
+      )
+"""
+
 
 class PostgresContentRepository(ContentRepository):
     _BRAND_PACKET_CHARACTER_BUDGET = 12_000
@@ -136,7 +266,13 @@ class PostgresContentRepository(ContentRepository):
             "publication_contract_digest",
         }
     )
-    _PUBLICATION_V3_COMPLETION_KEYS = frozenset(
+    _PUBLICATION_V3_GROUNDING_KEYS = frozenset(
+        {
+            "writer_confirmed_product_fact_refs",
+            "used_persona_quote_ids",
+        }
+    )
+    _PUBLICATION_V3_LEGACY_COMPLETION_KEYS = frozenset(
         {
             "creative_kernel_v5",
             "writer_request_v3",
@@ -168,6 +304,24 @@ class PostgresContentRepository(ContentRepository):
             "publication_contract_digest",
         }
     )
+    _PUBLICATION_V3_COMPLETION_KEYS = (
+        _PUBLICATION_V3_LEGACY_COMPLETION_KEYS | _PUBLICATION_V3_GROUNDING_KEYS
+    )
+    _PERSONA_QUOTE_IDS = frozenset(
+        {
+            "PS-S02-01",
+            "PS-S02-02",
+            "PS-S02-03",
+            "PS-S02-04",
+            "PS-S02-05",
+            "PS-S04-01",
+            "PS-S04-02",
+            "PS-S04-03",
+            "PS-S04-04",
+            "PS-S04-05",
+        }
+    )
+    _VERSIONED_PERSONA_QUOTE_IDS = frozenset({"PS-S02-05", "PS-S04-03"})
     _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS = _DUAL_TRACK_COMPLETION_KEYS - _PUBLICATION_COMPLETION_KEYS
     _MEDIA_NATIVE_COMPLETION_KEYS = _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
     _LEGACY_DUAL_TRACK_COMPLETION_KEYS = _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
@@ -265,7 +419,10 @@ class PostgresContentRepository(ContentRepository):
         compiler_version = patch.get("delivery_compiler_version")
         expected_key_sets: tuple[frozenset[str], ...]
         if compiler_version == DELIVERY_COMPILER_V5_VERSION:
-            expected_key_sets = (cls._PUBLICATION_V3_COMPLETION_KEYS,)
+            expected_key_sets = (
+                cls._PUBLICATION_V3_COMPLETION_KEYS,
+                cls._PUBLICATION_V3_LEGACY_COMPLETION_KEYS,
+            )
         elif compiler_version == DELIVERY_COMPILER_VERSION:
             expected_key_sets = (
                 cls._DUAL_TRACK_COMPLETION_KEYS,
@@ -290,11 +447,77 @@ class PostgresContentRepository(ContentRepository):
         )
         if patch.get("version_authorization") != expected_authorization:
             raise DomainError("内容版本缺少确定性双轨授权")
+        if patch_keys == cls._PUBLICATION_V3_COMPLETION_KEYS:
+            cls._validate_publication_v3_grounding(current, patch)
         for key in cls._REVISION_IMMUTABLE_SNAPSHOT_KEYS:
             current_value = current.get(key)
             if current_value is not None and key in patch and patch[key] != current_value:
                 raise DomainError(f"内容修订不能改变冻结字段：{key}")
         return current | dict(patch)
+
+    @staticmethod
+    def _completion_ref_list(value: object, message: str) -> tuple[str, ...]:
+        if (
+            not isinstance(value, list)
+            or any(not isinstance(ref, str) or not ref for ref in value)
+            or len(value) != len(set(value))
+        ):
+            raise DomainError(message)
+        return tuple(cast(list[str], value))
+
+    @classmethod
+    def _validate_publication_v3_grounding(
+        cls,
+        current: Mapping[str, object],
+        patch: Mapping[str, object],
+    ) -> None:
+        fact_refs = cls._completion_ref_list(
+            patch.get("writer_confirmed_product_fact_refs"),
+            "Writer 确认商品事实引用无效",
+        )
+        product_packet = current.get("product_fact_packet")
+        raw_facts = product_packet.get("facts") if isinstance(product_packet, Mapping) else None
+        if not isinstance(raw_facts, list):
+            raise DomainError("Writer 确认商品事实未绑定冻结事实包")
+        frozen_fact_ids = {
+            str(fact["fact_id"])
+            for fact in raw_facts
+            if isinstance(fact, Mapping)
+            and isinstance(fact.get("fact_id"), str)
+            and fact["fact_id"]
+        }
+        if any(ref not in frozen_fact_ids for ref in fact_refs):
+            raise DomainError("Writer 确认商品事实引用超出冻结事实包")
+
+        quote_ids = cls._completion_ref_list(
+            patch.get("used_persona_quote_ids"),
+            "Writer 人设原句引用无效",
+        )
+        publication = current.get("publication_contract")
+        brand_use = publication.get("brand_context_use") if isinstance(publication, Mapping) else None
+        consumed_refs = brand_use.get("consumed_refs") if isinstance(brand_use, Mapping) else None
+        frozen_quote_refs = set(
+            cls._completion_ref_list(
+                consumed_refs,
+                "Writer 人设原句未绑定冻结发布合同",
+            )
+        )
+        if any(ref not in cls._PERSONA_QUOTE_IDS or ref not in frozen_quote_refs for ref in quote_ids):
+            raise DomainError("Writer 人设原句引用超出冻结授权条目")
+        versioned_quote_ids = cls._VERSIONED_PERSONA_QUOTE_IDS.intersection(quote_ids)
+        if not versioned_quote_ids:
+            return
+        evidence = publication.get("brand_relevance_evidence") if isinstance(publication, Mapping) else None
+        if not isinstance(evidence, Mapping) or evidence.get("authorization") is None:
+            raise DomainError("Writer 人设原句缺少冻结授权")
+        authorization_document = evidence["authorization"]
+        authorization = authorization_contract_from_document(authorization_document)
+        if (
+            len(versioned_quote_ids) != 1
+            or authorization.subject_ref != next(iter(versioned_quote_ids))
+            or evidence.get("authorization_ref") != authorization.authorization_id
+        ):
+            raise DomainError("Writer 人设原句与冻结授权不一致")
 
     @classmethod
     def _version_audit_snapshot(
@@ -328,6 +551,11 @@ class PostgresContentRepository(ContentRepository):
                 FINAL_VISIBLE_PROJECTION_V3 if audit_version == AUDIT_VERSION_V3 else FINAL_VISIBLE_PROJECTION_V2
             ),
             **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
+            **{
+                key: task_snapshot[key]
+                for key in cls._PUBLICATION_V3_GROUNDING_KEYS
+                if key in task_snapshot
+            },
         }
         creative_kernel = (
             audit["creative_kernel_v5"]
@@ -1964,71 +2192,7 @@ class PostgresContentRepository(ContentRepository):
     def load_product_facts(self, scope: TrustedScope, weak_seed: str) -> tuple[ProductFact, ...]:
         with self._tx(scope) as cursor:
             cursor.execute(
-                """
-                SELECT product.id AS product_id,
-                       product_version.id AS product_version_id,
-                       product.sku, product_version.display_name,
-                       product_version.facts, product_version.source_kind,
-                       product_version.source_note,
-                       product_version.version_number AS fact_version,
-                       product_version.applicability
-                FROM brand_products product
-                JOIN brand_product_versions product_version
-                  ON product_version.tenant_id = product.tenant_id
-                 AND product_version.brand_id = product.brand_id
-                 AND product_version.product_id = product.id
-                 AND product_version.id = product.current_version_id
-                JOIN content_accounts target_account
-                  ON target_account.tenant_id = product.tenant_id
-                 AND target_account.brand_id = product.brand_id
-                 AND target_account.id = %s
-                JOIN content_accounts root_account
-                  ON root_account.tenant_id = target_account.tenant_id
-                 AND root_account.id = COALESCE(
-                       target_account.carrier_of_account_id, target_account.id
-                     )
-                WHERE product.tenant_id = %s AND product.brand_id = %s
-                  AND product.status = 'active'
-                  AND product.current_version_id IS NOT NULL
-                  AND product.business_data_kind = 'formal_business_data'
-                  AND target_account.enabled = true
-                  AND root_account.enabled = true
-                  AND (
-                    product_version.visibility_scope = 'brand_all'
-                    OR (
-                      product_version.visibility_scope = 'organizations'
-                      AND root_account.control_organization_id IS NOT NULL
-                      AND EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                          product_version.scope_organization_ids
-                        ) AS product_scope(organization_id)
-                        WHERE organization_is_same_or_descendant(
-                          product.tenant_id,
-                          root_account.control_organization_id,
-                          product_scope.organization_id
-                        )
-                      )
-                    )
-                    OR (
-                      product_version.visibility_scope = 'headquarters'
-                      AND root_account.control_organization_id IS NOT NULL
-                      AND EXISTS (
-                        SELECT 1
-                        FROM unnest(
-                          product_version.scope_organization_ids
-                        ) AS product_scope(organization_id)
-                        JOIN organizations scoped_organization
-                          ON scoped_organization.tenant_id = product.tenant_id
-                         AND scoped_organization.id = product_scope.organization_id
-                         AND scoped_organization.organization_level = 'company'
-                        WHERE product_scope.organization_id =
-                              root_account.control_organization_id
-                      )
-                    )
-                  )
-                ORDER BY product.sku
-                """,
+                _CURRENT_PRODUCT_FACTS_SQL,
                 (scope.account_id, scope.tenant_id, scope.brand_id),
             )
             rows = cursor.fetchall()
@@ -2084,55 +2248,7 @@ class PostgresContentRepository(ContentRepository):
             return ()
         with self._tx(scope) as cursor:
             cursor.execute(
-                """
-                SELECT product.id AS product_id, product.current_version_id AS product_version_id,
-                       sku, display_name, facts, source_kind, source_note,
-                       fact_version, applicability
-                FROM brand_products product
-                JOIN content_accounts target_account
-                  ON target_account.tenant_id = product.tenant_id
-                 AND target_account.brand_id = product.brand_id
-                 AND target_account.id = %s
-                JOIN content_accounts root_account
-                  ON root_account.tenant_id = target_account.tenant_id
-                 AND root_account.id = COALESCE(
-                       target_account.carrier_of_account_id, target_account.id
-                     )
-                WHERE product.tenant_id = %s AND product.brand_id = %s
-                  AND product.sku = ANY(%s)
-                  AND product.business_data_kind = 'formal_business_data'
-                  AND (
-                    product.visibility_scope = 'brand_all'
-                    OR (
-                      root_account.control_organization_id IS NOT NULL
-                      AND EXISTS (
-                        SELECT 1
-                        FROM brand_product_scope_organizations product_scope
-                        JOIN organizations scoped_organization
-                          ON scoped_organization.tenant_id = product_scope.tenant_id
-                         AND scoped_organization.id = product_scope.organization_id
-                        WHERE product_scope.tenant_id = product.tenant_id
-                          AND product_scope.product_id = product.id
-                          AND (
-                            (
-                              product.visibility_scope = 'organizations'
-                              AND organization_is_same_or_descendant(
-                                    product.tenant_id,
-                                    root_account.control_organization_id,
-                                    product_scope.organization_id
-                                  )
-                            )
-                            OR (
-                              product.visibility_scope = 'headquarters'
-                              AND scoped_organization.organization_level = 'company'
-                              AND product_scope.organization_id =
-                                  root_account.control_organization_id
-                            )
-                          )
-                      )
-                    )
-                  )
-                """,
+                _FROZEN_PRODUCT_FACTS_SQL,
                 (scope.account_id, scope.tenant_id, scope.brand_id, list(refs)),
             )
             rows = cursor.fetchall()
@@ -2146,6 +2262,33 @@ class PostgresContentRepository(ContentRepository):
         version = row["fact_version"]
         if not isinstance(version, int):
             raise DomainError("商品事实版本无效")
+        judgment_ref: str | None = None
+        judgment_version: str | None = None
+        judgment_digest: str | None = None
+        judgment_conditions: tuple[str, ...] = ()
+        raw_judgment_content = row.get("judgment_content")
+        if raw_judgment_content is not None:
+            if not isinstance(raw_judgment_content, str):
+                raise DomainError("商品判断数据无效")
+            try:
+                judgment_document = json.loads(raw_judgment_content)
+            except json.JSONDecodeError as error:
+                raise DomainError("商品判断数据无效") from error
+            raw_conditions = (
+                judgment_document.get("applicability_conditions")
+                if isinstance(judgment_document, dict)
+                else None
+            )
+            if (
+                not isinstance(raw_conditions, list)
+                or not raw_conditions
+                or any(not isinstance(item, str) or not item.strip() for item in raw_conditions)
+            ):
+                raise DomainError("商品判断适用条件无效")
+            judgment_ref = str(row["judgment_ref"])
+            judgment_version = str(row["judgment_version"])
+            judgment_digest = hashlib.sha256(raw_judgment_content.encode()).hexdigest()
+            judgment_conditions = tuple(raw_conditions)
         return ProductFact(
             sku=str(row["sku"]),
             display_name=str(row["display_name"]),
@@ -2158,6 +2301,10 @@ class PostgresContentRepository(ContentRepository):
             product_version_id=(
                 UUID(str(row["product_version_id"])) if row.get("product_version_id") is not None else None
             ),
+            judgment_ref=judgment_ref,
+            judgment_version=judgment_version,
+            judgment_digest=judgment_digest,
+            judgment_applicability_conditions=judgment_conditions,
         )
 
     def _attach_series_task(

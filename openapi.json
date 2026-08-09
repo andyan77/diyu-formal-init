@@ -107,6 +107,47 @@
         "title": "BrandExpressionConfirmRequest",
         "type": "object"
       },
+      "BrandFeedbackObservationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "observation_payload": {
+            "additionalProperties": true,
+            "maxProperties": 20,
+            "minProperties": 1,
+            "title": "Observation Payload",
+            "type": "object"
+          },
+          "source_account_id": {
+            "format": "uuid",
+            "title": "Source Account Id",
+            "type": "string"
+          },
+          "source_task_id": {
+            "format": "uuid",
+            "title": "Source Task Id",
+            "type": "string"
+          },
+          "source_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version Id"
+          }
+        },
+        "required": [
+          "source_task_id",
+          "source_account_id",
+          "observation_payload"
+        ],
+        "title": "BrandFeedbackObservationRequest",
+        "type": "object"
+      },
       "BrandLibraryEntryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -348,6 +389,50 @@
             "title": "Applicability",
             "type": "array"
           },
+          "effective_at": {
+            "format": "date-time",
+            "title": "Effective At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "fact_subject": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brand_identity",
+                  "brand_positioning",
+                  "audience_relationship",
+                  "brand_expression",
+                  "local_context"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Subject"
+          },
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
           "publication_role": {
             "enum": [
               "public_brand_fact",
@@ -368,12 +453,23 @@
             "format": "uuid",
             "title": "Source Segment Id",
             "type": "string"
+          },
+          "visibility_scope": {
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
           }
         },
         "required": [
           "source_segment_id",
           "publication_role",
-          "published_text"
+          "published_text",
+          "visibility_scope",
+          "effective_at"
         ],
         "title": "BrandPublicationProjectionItemRequest",
         "type": "object"
@@ -4702,6 +4798,85 @@
         "summary": "Get Version"
       }
     },
+    "/api/v1/tenant-management/brand-feedback-observations": {
+      "get": {
+        "operationId": "management_brand_feedback_observations_api_v1_tenant_management_brand_feedback_observations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Brand Feedback Observations Api V1 Tenant Management Brand Feedback Observations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Brand Feedback Observations"
+      },
+      "post": {
+        "operationId": "create_management_brand_feedback_observation_api_v1_tenant_management_brand_feedback_observations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandFeedbackObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Management Brand Feedback Observation Api V1 Tenant Management Brand Feedback Observations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Management Brand Feedback Observation"
+      }
+    },
     "/api/v1/tenant-management/brand-library": {
       "get": {
         "operationId": "management_brand_library_api_v1_tenant_management_brand_library_get",
@@ -5288,6 +5463,50 @@
         "summary": "Create Management Brand Publication Candidate"
       }
     },
+    "/api/v1/tenant-management/brand-publication/preview": {
+      "post": {
+        "operationId": "preview_management_brand_publication_candidate_api_v1_tenant_management_brand_publication_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandPublicationProjectionCandidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Management Brand Publication Candidate Api V1 Tenant Management Brand Publication Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Preview Management Brand Publication Candidate"
+      }
+    },
     "/api/v1/tenant-management/brand-publication/sources": {
       "get": {
         "operationId": "management_brand_publication_sources_api_v1_tenant_management_brand_publication_sources_get",
@@ -5381,6 +5600,40 @@
           }
         ],
         "summary": "Confirm Management Brand Publication"
+      }
+    },
+    "/api/v1/tenant-management/brand-relevance-governance": {
+      "get": {
+        "operationId": "management_brand_relevance_governance_api_v1_tenant_management_brand_relevance_governance_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Management Brand Relevance Governance Api V1 Tenant Management Brand Relevance Governance Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Brand Relevance Governance"
       }
     },
     "/api/v1/tenant-management/control-organizations": {

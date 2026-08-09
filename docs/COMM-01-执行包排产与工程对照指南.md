@@ -1007,6 +1007,29 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 
 <!-- BRAND-MATRIX-01-GATEC-SUPERVISOR-VERDICT-END -->
 
+<!-- BRAND-MATRIX-01-GATED-EVIDENCE-BLOCK-START -->
+
+### Gate D 执行侧媒体证据阻断记录（2026-08-08）
+
+> **待监理复核**。状态为 `GATE-D EVIDENCE_BLOCKED · MEDIA_QUALIFICATION_INSUFFICIENT`，
+> 不等于 Gate D 已实现或通过。
+
+- D0 已把 publication-contract-v2 正式接入 React/API/仓储/任务快照；客户端治理字段拒绝，
+  服务端来源派生和确认后任务消费成立。两轮隔离导入 batch digest 与对象指纹分别逐字节一致。
+- 账号与载体精确为 10 根账号、20 carrier、30 矩阵账号行、40 平台/形式目标；旧 9 账号
+  归档隐藏且历史可读。31 条区域/门店资料全部登记，28 条进入 V2 projection，RK-EC-08
+  新任务消费为 0；七个组织任务冻结真实 projection item。
+- 四组 J 在 P1/P2 实际依据中可见；两条人物授权均完成失败释放、V1 单次核销、同谱系 V2
+  不二次核销和第二独立任务拒绝。反馈只进入观察层，下一任务不消费。
+- 26 个技术母版及源/母版 checksum 全部完成，二进制不入 Git；十项媒体门因逐文件权利证据
+  不完整判为 PASS 0 / FAIL 0 / QUARANTINED 26，原片和母版 P5 eligibility 均为 0。
+- 依据 Prompt 5 rev3 补正条款，P5 和全部正式 provider 套件在调用前停止：task/run/version
+  `0/0/0`，provider request `0`。八剧本/八异常只登记机制证据，未冒充正式 `8/8`。
+- 唯一下一动作：监理复核媒体证据缺口；取得至少两份分别绑定不同正式商品的 PASS 母版后，
+  从完整确定性工程门重新冻结候选并运行正式套件。
+
+<!-- BRAND-MATRIX-01-GATED-EVIDENCE-BLOCK-END -->
+
 ### Prompt 5（Gate D）签发记录（2026-08-08）
 
 - 基线：本签发记录提交自身（SHA 以 chat 签发件载明值为准）；执行分支 `exe/brand-matrix-d`；
@@ -1290,3 +1313,264 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
     SHA 上从中断卡继续（已完成卡不重新请求、失败卡重新请求为同卡新尝试）；内容性拒绝
     后仍禁续跑。跨 SHA 拼接依旧绝对禁止。
 - 预算注记：44/80；修复后整套重跑预计 ≈59/80；若再遇传输中断按 ③ 续跑而非整套重烧。
+### Gate D 媒体解锁后正式套件失败安全记录（2026-08-08，执行侧）
+
+> **待监理复核确认**。本记录不代替监理独立审查，不将失败安全写成 Gate D PASS。
+
+- `ATT-MEDIA-20260808-01` 已追加登记；26 份母版四道权利门转为限定作用域 PASS，
+  其余六道未重算；终态 PASS/FAIL/QUARANTINED 为 `26/0/0`。
+- 新媒体 digest `587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b`；
+  6 份母版绑定 4 个正式商品，P5 前置成立，原片 P5 资格仍为 0。
+- 确定性全门及 CI run `31292553896` 四查通过后，唯一 runtime candidate 冻结为
+  `997e6b55c1c40dacd44a46ff6617b28766011958`。
+- 正式套件在第 6 卡的唯一响应之后被既有商品事实块保护边界拒绝；请求总数
+  `6`、重试 `0`、重跑 `0`、5 卡已落版本、第 6 卡失败且无版本。
+- 执行侧依纪律立即停止，终态为
+  **`GATE-D FAILED_SAFE · FORMAL_SUITE_BOUNDARY_REJECTED`**。首次 provider request 后未改动代码、
+  Prompt、数据或媒体；只追加脱敏证据、ledger 和治理记录。
+- 下一动作：监理复核失败证据；是否进入共享根因修复和新候选整套重跑，须由主控
+  重新签发，不在本轮自动续行。
+
+<!-- BRAND-MATRIX-01-GATED-FINAL-RERUN-FAILED-SAFE-START -->
+
+### Gate D 共享根因修复后整套重跑失败安全记录（2026-08-08，执行侧）
+
+> **待监理复核确认**。状态为
+> `GATE-D FAILED_SAFE · FORMAL_SUITE_UNCONFIRMED_PRODUCT_SPECIFICITY_REJECTED`，不等于
+> Gate D 已实现或通过。
+
+- R-1 通用修复完成：已确认 V 级事实允许逐字面向消费者使用；可确定的改值、未确认成分
+  百分比/价格/工艺/年龄/性能、画像逐字复制和内部选择计划照抄继续拒绝。第一人称具体经历
+  只可取授权原句库并冻结 ID；未新增语义检测器。15 张验收卡已清除内部系统话术。
+- 补充授权仅修改 `frontend/test/**`：补齐 `team-usage`、`admin/readiness` stub 及临时
+  profile 清理竞态；Chrome 既有断言未删减，`frontend/src/**` 零修改。
+- 唯一 runtime candidate 为 `f7e8e81c80ebc8552794f82aab81ef509e242b14`；本地全门
+  `1016 passed / 2 skipped`，CI run `31297635710` 四查全绿。候选登记 digest 为
+  `90d1ad5a0d31c22e0c0904cd5c9a2d6653b4ec52dad2b11fcbad0252bc6a399a`。
+- 隔离栈从零重建，两轮 batch digest `f15d0efe…1750`、对象指纹 `e48dc654…6b88`
+  逐字节一致；媒体 PASS(scope) `26` / FAIL `0` / QUARANTINED `0`，母版 P5 资格 `6`、
+  覆盖 4 个正式商品。
+- 新候选正式套件在首卡 `S01-P1` 收到唯一响应后，确定性守卫命中
+  `performance_assertion:耐穿` 并拒绝未确认商品性能断言；task/run/version 未提交。
+  这是新共享根因，不是旧“针织开衫”真值误拒。上一候选 5 张完成卡只作历史证据，未拼接。
+- ledger 累计为前 6 次 + 本轮 1 次 = `7/80`，temperature `0`、max_retries `0`、
+  transport retry `0`、失败后重跑 `0`。私有原始证据继续 0700/0600；Git raw response、
+  密钥、视频/母版二进制均为 0。
+- 按唯一一次共享修复纪律，执行侧停止，不自行启动第二次修复。唯一下一动作是监理复核；
+  继续与否及新的产品语义边界须由主控另行裁决和签发。
+
+<!-- BRAND-MATRIX-01-GATED-FINAL-RERUN-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-02-FAILED-SAFE-START -->
+
+### Gate D 第二次共享修复后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED`，不等于
+> Gate D 已实现或通过。
+
+- ADJ-WRITER-BOUNDARY-03 三层制已实现：L1 未确认具体/保证/绝对断言仍硬拦；
+  L2 `耐穿/百搭/好打理/显精神` 作为不取得 ProductFact 资格的软表达放行；
+  L3 保持用户侧条件语态。双向回归和本轮唯一正式响应均证明 L2 不再被误拒。
+- 新 runtime candidate 为 `ba4208a6ea96775683ecd89f41b6cd869b45eead`；本地全门
+  `1025 passed / 2 skipped`，CI run `31299692372` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离栈从零重建；两轮 batch digest `f15d0efe…1750`、对象指纹
+  `e48dc654…6b88` 逐字节一致。媒体仍为 PASS(scope) `26` / FAIL `0` /
+  QUARANTINED `0`，母版 P5 资格 `6`，覆盖 4 个正式商品。
+- 正式套件在首卡 `S01-P1` 收到唯一响应并通过 Writer 边界后，在成品持久化
+  失败关闭：adapter 产出的 `writer_confirmed_product_fact_refs` 和
+  `used_persona_quote_ids` 未被仓储 publication-v3 completion 精确字段集接纳。
+  隔离库保留 task/run=`1/1`，run=`failed`，version=`0`。
+- provider ledger 累计为 `8/80`：请求 1–6 绑定 `997e6b5…`，请求 7 绑定
+  `f7e8e81…`，请求 8 绑定 `ba4208a…`；transport retry `0`、失败后请求 `0`、
+  三个候选产物不拼接。
+- 该问题是新的通用快照契约不同步，不是模型胡编或 L2 政策回归。按本指令停止线，
+  执行侧未自行进行第三次修复或 provider 重跑。生产/SSH/ECS 0、alembic 0、
+  密钥泄漏 0、二进制入 Git 0。
+- 唯一下一动作：监理复核三层制、冻结纪律、ledger 及新快照契约失败证据；
+  如要继续，由主控另行签发新指令。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-02-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-03-FAILED-SAFE-START -->
+
+### Gate D 第三轮机械修复后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · WRITER_ABSOLUTE_CLAIM_FALSE_POSITIVE`，不等于 Gate D 已实现或通过。
+
+- publication-v3 completion 白名单已纳入两个合法 Writer 审计字段，仍对未知字段、未冻结事实、
+  非法人物原句和 single-use 授权不一致失败关闭；旧快照不回填、不改旧 digest。正式套件首卡
+  `S01-P1` 已成功提交 version 1，版本审计快照真实含两字段。
+- runtime candidate 为 `596b87e7e9d0551c6b62834137e03eed2bf52c82`；本地全门
+  `1033 passed / 2 skipped`，CI run `31302112683` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离栈从零重建，两轮 batch digest `f15d0efe…1750`、对象指纹 `e48dc654…6b88` 一致；
+  媒体 PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个商品。
+- 第二卡 `S01-P2` 的条件建议“整套搭配里最好不要再出现第二个强色”被绝对化正则误判为
+  `absolute_claim:最好`，继而被未确认具体信息守卫拒绝。该卡未生成版本；这不是商品事实改写、
+  不是 L2 回归，也不是快照字段回归。
+- 本轮 provider request 2、历史 8、累计 `10/80`；temperature 0、max_retries 0、transport
+  retry 0、失败后请求 0。候选链产物不拼接，当前候选仅 1 张完成卡，八剧本/八异常未完成。
+- 私有证据目录 0700、文件 0600、SHA256SUMS 校验通过；Git raw response、完整 artifact、密钥、
+  视频和母版二进制均为 0。生产/SSH/ECS 0、alembic 0。
+- 按第三轮指令停止线，执行侧未修改正则或开启第四轮。唯一下一动作：监理复核；继续须由主控
+  另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-03-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-04-FAILED-SAFE-START -->
+
+### Gate D 第四轮守卫修复后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · SINGLE_USE_AUTHORIZATION_PRECONSUMED`，不等于 Gate D 已实现或通过。
+
+- `absolute_claim` 机器守卫已移除 `最/第一` 歧义匹配，保留 `100%`、`永不/绝不`和保证类
+  性能硬门；正式套件中上一候选失败的 `S01-P2` 已成功落版，证明修复进入真实运行链。
+- runtime candidate 为 `7e48f7a7d96d4a196a8cbc8e503efe55f36291f9`；本地全门
+  `1037 passed / 2 skipped`，CI run `31303644503` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离栈重建后两轮 batch digest `f15d0efe…1750`、对象指纹 `e48dc654…6b88` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个正式商品。
+- 本候选前 11 张卡均落版；`S06-S02-P3` 在创建 task/run/version 和 provider 请求前失败关闭。
+  私有 bundle 响应数为 0；数据库回读确认它所需的 single-use `PS-S02-05` 已被正式套件前的
+  确定性授权消费者证明核销。授权状态机正确拒绝，问题是同一隔离栈的证明编排预先消耗资格。
+- ledger 本轮 11、历史 10、累计 `21/80`；temperature 0、max_retries 0、transport retry 0、
+  失败后请求 0。候选产物不拼接；八剧本/八异常未完成。
+- 首次请求后仅追加脱敏证据、治理记录与 MILESTONE；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。按第四轮停止线，不自行第五轮修复或 provider 重跑。
+- 唯一下一动作：监理复核守卫实证、授权预先核销编排诊断、冻结纪律和累计 ledger；继续须由
+  主控另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-04-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-05-FAILED-SAFE-START -->
+
+### Gate D 第五轮授权再许可后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · NEGATED_ALTERNATIVE_PERFORMANCE_TERM_REJECTED`，不等于 Gate D 已实现或通过。
+
+- `PS-S02-05`、`PS-S04-03` 已按 `AMD-AUTH-20260809-01` 追加 v2 可重复授权，旧 v1 和 digest
+  保留；`ANOM-07` 改用两条专用 DEMO-TEST single-use fixture，正式前置验证对业务授权事件为 0。
+- runtime candidate 为 `e0dba46689397f16a967efbc126621df0683f385`；本地全门
+  `1041 passed / 2 skipped`，CI run `31306058996` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 新两轮 batch digest `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个正式商品。
+- 本候选 7 张卡完成；第 8 张 `S05-R01-P1` 收到一次响应后，排除性句子“如果需要防风防水
+  的功能外套……它就不是那个答案”中的 `防水` 被机器误作本商品防水主张，命中
+  `guaranteed_performance_assertion:防水` 并拒绝落版。失败卡 task/run/version=`1/1/0`。
+- ledger 本轮 8、历史 21、累计 `29/80`；temperature 0、max_retries 0、transport retry 0、
+  失败后请求 0。候选产物不拼接；八剧本/八异常未完成。
+- 首次请求后仅追加脱敏证据、治理记录与 MILESTONE；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。按第五轮停止线，不自行第六轮修复或 provider 重跑。
+- 唯一下一动作：监理复核授权再许可、编排隔离、否定性边界词误拦诊断、冻结纪律和累计 ledger；
+  继续须由主控另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-05-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-06-FAILED-SAFE-START -->
+
+### Gate D 第六轮性能词极性收口后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · PROVIDER_REQUEST_FAILURE`，不等于 Gate D 已实现或通过。
+
+- 性能词机器硬门已收窄到明确肯定组合；裸性能词进入非阻断审阅标注。本地正反回归和完整
+  工程门通过，实际 12 份成品登记 4 条非阻断标注，未再出现裸词误杀。
+- runtime candidate 为 `3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b`；本地全门
+  `1047 passed / 2 skipped`，CI run `31307989195` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 两轮 batch digest `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个正式商品。
+- 本候选 12 张卡落版；第 13 张 `S06-S04-P3` 的唯一 provider 请求失败，未取得可接受响应，
+  task/run/version=`1/1/0`，后 2 张卡未运行。失败类型仅能确认 `ProviderRequestFailure`，不
+  臆测更细原因。
+- ledger 本轮 13 次请求尝试（12 响应、1 失败）、历史 29、累计 `42/80`；temperature 0、
+  max_retries 0、transport retry 0、失败后请求 0。候选产物不拼接；八剧本/八异常未完成。
+- 首次请求后仅追加脱敏证据、治理记录与 MILESTONE；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。按第六轮停止线，不自行第七轮或 provider 重跑。
+- 唯一下一动作：监理复核极性收口、非阻断标注、provider 失败安全、冻结纪律和累计 ledger；
+  继续须由主控另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-06-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-USER-RETRY-FAILED-SAFE-START -->
+
+### Gate D 用户授权再次尝试后失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · PROVIDER_REQUEST_FAILURE`，不等于 Gate D 已实现或通过。
+
+- 用户“再次尝试”按完整套件解释：保留历史 42 次账本，不补跑旧失败卡、不拼接旧成品。
+- 新候选 `587bed9168e92db7444db81ba9123b92a80cbacf`；本地 `1048 passed / 2 skipped`，
+  CI run `31309326766` 四查通过；两轮导入与媒体资格复检无漂移。
+- 本轮 `S01-P1` 成功落版，`S01-P2` 的唯一 provider 请求失败；本轮请求 2、累计 `44/80`，
+  max_retries 0、失败后请求 0，后 13 卡未运行。
+- 当前只能确认 `ProviderRequestFailure`，不能进一步归因；产品代码、Prompt、生产、alembic、
+  密钥和二进制均无新增风险。
+- 唯一下一动作：监理复核两次 provider 失败，决定暂停等待或另行签发服务诊断/重跑指令。
+
+<!-- BRAND-MATRIX-01-GATED-USER-RETRY-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-07-PRECONDITION-BLOCKED-START -->
+
+### Gate D 第七轮 provider 端点不匹配前置阻断记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D PRECONDITION_BLOCKED · PROVIDER_ENDPOINT_MISMATCH`，不等于 Gate D 已实现或通过。
+
+- 直连 `trust_env=False`、传输重试≤2、内容重试 0、零预算 TCP/TLS 握手和账本回归
+  已通过全部本地门；候选 `f00e5d44098e2ef2ef70d76dab67a3e3fdd03ea4`，CI
+  `31310993995` 四查全绿。
+- 隔离栈已重建，两轮导入 digest/指纹一致，媒体 26 PASS(scope)，冻结登记 digest
+  `93a49a1d0cebcb62d2cc52c93594e0dd891bf69bb79dd1c82331a7887cfb3bf1`。
+- 精确解析的 provider 主机为 `api.deepseek.com`，与本轮冻结的 `*.aliyuncs.com` 端点冲突。
+  握手在建连和补全请求前阻断；本轮请求 0，累计 `44/80`。
+- 唯一下一动作：主控对齐授权环境端点与 `f783c37`，或另行签发端点政策修订；
+  执行侧不绕过前置门。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-07-PRECONDITION-BLOCKED-END -->
+
+<!-- BRAND-MATRIX-01-PROVIDER-ENDPOINT-AUTH-START -->
+
+### DeepSeek 官方端点统一裁决（2026-08-09）
+
+- 用户已确认 `AUTH-PROVIDER-ENDPOINT-20260809-01`：当前正式 provider 主机为
+  `api.deepseek.com`。
+- 本裁决取代 `f783c37` / `UNLOCK-D-RERUN-07` 中将当前端点固定为
+  `*.aliyuncs.com` 的部分；后续不得再因该旧主机识别与已授权官方配置冲突。
+- LLM Gateway、精确三键解析、密钥不落盘、直连、握手、内容重试 0、传输重试≤2、
+  唯一候选和 provider 预算纪律不变。
+- 本记录仅表示用户裁决已落盘；运行代码和候选尚未依裁决重建，Gate D 仍未完成。
+
+<!-- BRAND-MATRIX-01-PROVIDER-ENDPOINT-AUTH-END -->
+
+<!-- BRAND-MATRIX-01-GATED-OFFICIAL-ENDPOINT-IMPLEMENTED-START -->
+
+### Gate D 官方 DeepSeek 端点完整套件实施记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`，尚非 Gate D `COMPLETE / PASS`。
+
+- 官方端点统一裁决已进入正式运行链：握手仅允许
+  `api.deepseek.com:443`，未知主机失败关闭；`trust_env=False`、三键精确
+  解析、密钥不落盘、内容重试 0 和传输重试≤2均继续生效。
+- 最终 runtime candidate `81289d8619ef831d9d6a79acceaac9090f17ee3a`；本地
+  `1057 passed / 2 skipped`，CI `31312097476` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离导入两轮 digest/指纹为 `20e1d00a…6ed` / `1ec150e8…2f98`；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、正式商品 4。
+- 完整正式套件在同一 SHA 上产生 15 张成品：八剧本 `8/8 PASS`、八异常
+  `8/8 PASS`。provider 历史 44 + 本轮 15 = `59/80`；仅 1 次无内容传输重试，
+  没有内容重试、择优或跨 SHA 拼接。
+- 私有 raw/artifact 证据保存在 0700/0600 私有目录，Git 只保存脱敏索引；
+  生产/SSH/ECS 0，alembic 0，密钥泄漏 0，二进制入 Git 0。
+- 9 条非阻断性性能词标注留待 founder 逐篇审阅；执行侧不代签监理或
+  founder 的独立人工终审。
+- 唯一下一动作：监理独立复验 + founder 逐篇审阅。
+
+<!-- BRAND-MATRIX-01-GATED-OFFICIAL-ENDPOINT-IMPLEMENTED-END -->

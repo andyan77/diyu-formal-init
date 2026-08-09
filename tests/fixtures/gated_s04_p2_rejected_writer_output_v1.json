@@ -1,0 +1,11 @@
+{
+  "card_id": "S04-S04-P2",
+  "fixture_version": "gated-s04-p2-rejected-boundary-excerpts-v1",
+  "machine_boundary_excerpt": "选针织开衫，先看已经确认的信息。未确认的效果、性能或者精确适配，不作确定表述。",
+  "prior_response_sha256": "4cb0ed314c93957a046f5447e7c349565de3f8f3089f8ffdabaf61ad444de33f",
+  "review_only_excerpts": [
+    "它提供的是层次感",
+    "在店里整理货架的时候"
+  ],
+  "runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958"
+}

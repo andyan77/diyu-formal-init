@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -18,6 +19,7 @@ from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import visible_context_basis, visible_direction
 from src.shared.display_integrity import assert_display_artifact_integrity
 from src.shared.errors import DomainError
+from src.shared.publication_scope import publication_projection_v2_digest
 from src.shared.tenant_brand_sources import classify_source_segment
 from src.shared.types import (
     DisplayScope,
@@ -26,6 +28,21 @@ from src.shared.types import (
     TrustedScope,
 )
 from src.shared.version_integrity import validate_version_content
+
+_PUBLICATION_PRODUCTS = frozenset(
+    {
+        "dressing_decision",
+        "product_truth",
+        "brand_life_narrative",
+        "local_response",
+        "visual_styling_story",
+    }
+)
+_PUBLICATION_ROLES = {
+    "brand_fact": {"public_brand_fact", "expression_constraint", "internal_only"},
+    "expression_constraint": {"expression_constraint", "internal_only"},
+    "creative_method": {"creative_method", "internal_only"},
+}
 
 
 class PostgresWorkbenchRepository(WorkbenchRepository):
@@ -1866,6 +1883,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "published_text": str(item["published_text"]),
             "applicability": [str(value) for value in (applicability if isinstance(applicability, list) else [])],
             "source_kind": str(item["source_kind"]),
+            "source_ref": str(item["source_ref"]),
             "source_segment_id": cls._optional_text(item, "source_segment_id"),
             "source_document_id": cls._optional_text(item, "source_document_id"),
             "source_id": cls._optional_text(item, "source_id"),
@@ -2056,23 +2074,352 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 break
         return options
 
-    def create_brand_publication_candidate(
-        self,
+    @staticmethod
+    def _publication_fact_identity(fact_subject: object) -> tuple[str, str]:
+        identities = {
+            "brand_identity": ("brand", "identity"),
+            "brand_positioning": ("brand", "positioning"),
+            "audience_relationship": ("brand", "audience_relationship"),
+            "brand_expression": ("brand", "expression"),
+            "local_context": ("local_context", "context_summary"),
+        }
+        identity = identities.get(str(fact_subject))
+        if identity is None:
+            raise DomainError("公开事实必须从服务端受控主题中选择。")
+        return identity
+
+    @classmethod
+    def _candidate_sources(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        source_ids: list[UUID],
+    ) -> dict[UUID, dict[str, object]]:
+        cursor.execute(
+            """
+            SELECT segment.id, segment.semantic_kind, segment.digest,
+                   segment.exact_text, segment.heading_path,
+                   segment.evidence_level, segment.segment_key,
+                   version_record.source_version, source.source_id
+              FROM brand_source_segments segment
+              JOIN brand_source_documents source
+                ON source.tenant_id = segment.tenant_id
+               AND source.brand_id = segment.brand_id
+               AND source.id = segment.document_id
+               AND source.current_version_id = segment.document_version_id
+               AND source.status = 'active'
+               AND source.activation_status = 'brand_user_authorized'
+              JOIN brand_source_document_versions version_record
+                ON version_record.tenant_id = segment.tenant_id
+               AND version_record.brand_id = segment.brand_id
+               AND version_record.id = segment.document_version_id
+             WHERE segment.tenant_id = %s AND segment.brand_id = %s
+               AND segment.id = ANY(%s)
+            """,
+            (scope.tenant_id, scope.brand_id, source_ids),
+        )
+        sources = {UUID(str(row["id"])): row for row in cursor.fetchall()}
+        if set(sources) != set(source_ids):
+            raise DomainError("只能引用当前品牌正在使用的源资料。")
+        return sources
+
+    @classmethod
+    def _candidate_scope_context(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
         scope: TenantManagementScope,
         items: tuple[dict[str, object], ...],
+    ) -> tuple[dict[UUID, dict[str, object]], str]:
+        requested = tuple(
+            dict.fromkeys(
+                UUID(str(organization_id))
+                for item in items
+                for organization_id in cast(tuple[UUID, ...], item.get("organization_ids", ()))
+            )
+        )
+        organizations: dict[UUID, dict[str, object]] = {}
+        if requested:
+            cursor.execute(
+                "SELECT id, organization_level FROM organizations "
+                "WHERE tenant_id = %s AND id = ANY(%s) AND enabled = true",
+                (scope.tenant_id, list(requested)),
+            )
+            organizations = {UUID(str(row["id"])): row for row in cursor.fetchall()}
+            if set(organizations) != set(requested):
+                raise DomainError("发布表达只能选择当前租户已启用的组织。")
+        cursor.execute(
+            "SELECT organization.organization_level FROM users manager "
+            "JOIN organizations organization ON organization.tenant_id=manager.tenant_id "
+            "AND organization.id=manager.organization_id WHERE manager.tenant_id=%s "
+            "AND manager.id=%s AND manager.enabled=true",
+            (scope.tenant_id, scope.user_id),
+        )
+        manager = cls._one(cursor, "找不到当前管理员的组织身份。")
+        return organizations, str(manager["organization_level"])
+
+    @staticmethod
+    def _candidate_source_fields(
+        item: dict[str, object],
+        source_id: UUID,
+        source: dict[str, object],
     ) -> dict[str, object]:
+        role, text = str(item["publication_role"]), str(item["published_text"]).strip()
+        raw_applicability = item.get("applicability", ())
+        if not text or not isinstance(raw_applicability, (list, tuple)):
+            raise DomainError("发布表达的文字或适用内容无效。")
+        applicability = tuple(dict.fromkeys(str(value) for value in raw_applicability))
+        if any(value not in _PUBLICATION_PRODUCTS for value in applicability):
+            raise DomainError("发布表达包含未知内容用途。")
+        if role != "internal_only" and not applicability:
+            raise DomainError("请明确这条品牌表达适用于哪些内容。")
+        heading_path = source["heading_path"]
+        if not isinstance(heading_path, list):
+            raise DomainError("品牌来源标题路径无效。")
+        kind = classify_source_segment(
+            str(source["source_id"]),
+            tuple(str(value) for value in heading_path),
+            str(source["exact_text"]),
+        )
+        if role not in _PUBLICATION_ROLES.get(kind, {"internal_only"}):
+            raise DomainError("这个来源的证据等级不能承担所选发布用途。")
+        return {
+            "publication_role": role,
+            "published_text": text,
+            "applicability": list(applicability),
+            "source_kind": "brand_source_segment",
+            "source_ref": str(source_id),
+            "source_version": str(source["source_version"]),
+            "source_digest": str(source["digest"]),
+        }
+
+    @staticmethod
+    def _candidate_scope_fields(
+        item: dict[str, object],
+        organizations: dict[UUID, dict[str, object]],
+    ) -> dict[str, object]:
+        visibility = str(item.get("visibility_scope"))
+        organization_ids = tuple(
+            dict.fromkeys(UUID(str(value)) for value in cast(tuple[UUID, ...], item.get("organization_ids", ())))
+        )
+        if visibility == "brand_all" and organization_ids:
+            raise DomainError("品牌全员发布表达不需要指定组织。")
+        if visibility == "headquarters" and (
+            len(organization_ids) != 1
+            or str(organizations[organization_ids[0]]["organization_level"]) != "company"
+        ):
+            raise DomainError("总部发布表达必须精确绑定一个公司级组织。")
+        if visibility == "organizations" and not organization_ids:
+            raise DomainError("指定组织发布表达必须选择至少一个组织。")
+        if visibility not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError("发布表达的可见范围无效。")
+        effective_at, expires_at = item.get("effective_at"), item.get("expires_at")
+        if not isinstance(effective_at, datetime) or effective_at.tzinfo is None:
+            raise DomainError("发布表达必须使用带时区的生效时间。")
+        if expires_at is not None and (
+            not isinstance(expires_at, datetime) or expires_at.tzinfo is None or expires_at <= effective_at
+        ):
+            raise DomainError("发布表达失效时间必须晚于生效时间。")
+        return {
+            "visibility_scope": visibility,
+            "scope_organization_ids": [str(value) for value in organization_ids],
+            "effective_at": effective_at,
+            "expires_at": expires_at,
+        }
+
+    @classmethod
+    def _candidate_authority_fields(
+        cls,
+        item: dict[str, object],
+        source_fields: dict[str, object],
+        scope_fields: dict[str, object],
+        manager_level: str,
+        brand_id: UUID,
+    ) -> dict[str, object]:
+        role, visibility = source_fields["publication_role"], scope_fields["visibility_scope"]
+        semantic_type: str | None = None
+        semantic_id: str | None = None
+        claim_key: str | None = None
+        if role == "public_brand_fact":
+            semantic_type, claim_key = cls._publication_fact_identity(item.get("fact_subject"))
+            semantic_id = str(brand_id)
+            if semantic_type == "local_context":
+                if visibility != "organizations":
+                    raise DomainError("本地事实必须绑定明确的区域或门店组织。")
+                authority = "local_formal"
+            elif visibility in {"brand_all", "headquarters"} and manager_level == "company":
+                authority = "headquarters_formal"
+            else:
+                raise DomainError("品牌正式事实只能由公司级管理员按品牌或总部范围发布。")
+        else:
+            if item.get("fact_subject") is not None:
+                raise DomainError("只有公开事实可以选择事实主题。")
+            authority = "expression_governance"
+        return {
+            "authority_class": authority,
+            "semantic_subject_type": semantic_type,
+            "semantic_subject_id": semantic_id,
+            "claim_key": claim_key,
+            "scope_contract_version": "publication-item-scope-v2",
+        }
+
+    @classmethod
+    def _prepare_v2_publication_items(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         if not items or len(items) > 64:
             raise DomainError("品牌发布表达需要 1 到 64 条经过核对的内容。")
         source_ids = [UUID(str(item["source_segment_id"])) for item in items]
         if len(set(source_ids)) != len(source_ids):
             raise DomainError("同一个来源片段不能在一个发布版本中重复使用。")
-        allowed_products = {
-            "dressing_decision",
-            "product_truth",
-            "brand_life_narrative",
-            "local_response",
-            "visual_styling_story",
+        sources = cls._candidate_sources(cursor, scope, source_ids)
+        organizations, manager_level = cls._candidate_scope_context(cursor, scope, items)
+        digest_items: list[dict[str, object]] = []
+        stored_items: list[dict[str, object]] = []
+        for position, item in enumerate(items, start=1):
+            source_id = UUID(str(item["source_segment_id"]))
+            source_fields = cls._candidate_source_fields(item, source_id, sources[source_id])
+            scope_fields = cls._candidate_scope_fields(item, organizations)
+            authority_fields = cls._candidate_authority_fields(
+                item, source_fields, scope_fields, manager_level, scope.brand_id
+            )
+            record = {"position": position, **source_fields, **scope_fields, **authority_fields}
+            digest_items.append(record)
+            stored_items.append(record | {"source_segment_id": source_id})
+        if not any(item["publication_role"] != "internal_only" for item in stored_items):
+            raise DomainError("至少需要一条可供创作端使用的品牌表达。")
+        return digest_items, stored_items
+
+    def preview_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            digest_items, stored_items = self._prepare_v2_publication_items(cursor, scope, items)
+            cursor.execute(
+                "SELECT COALESCE(max(version_number), 0) + 1 AS next_version "
+                "FROM brand_publication_projections WHERE tenant_id = %s AND brand_id = %s",
+                (scope.tenant_id, scope.brand_id),
+            )
+            version = self._integer(self._one(cursor, "无法计算发布版本")["next_version"])
+        return {
+            "contract_version": "brand-publication-projection-v2",
+            "version": version,
+            "digest": publication_projection_v2_digest(digest_items),
+            "item_count": len(stored_items),
+            "items": [dict(item) for item in digest_items],
+            "status": "preview",
         }
+
+    @staticmethod
+    def _insert_v2_publication_items(
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        projection_id: UUID,
+        items: list[dict[str, object]],
+    ) -> None:
+        for record in items:
+            cursor.execute(
+                """
+                INSERT INTO brand_publication_projection_items
+                    (id, tenant_id, brand_id, projection_id, position,
+                     publication_role, published_text, applicability,
+                     source_kind, source_segment_id, source_ref,
+                     source_version, source_digest, visibility_scope,
+                     scope_organization_ids, effective_at, expires_at,
+                     authority_class, semantic_subject_type,
+                     semantic_subject_id, claim_key, scope_contract_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                        'brand_source_segment', %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s,
+                        'publication-item-scope-v2')
+                """,
+                (
+                    uuid4(), scope.tenant_id, scope.brand_id, projection_id,
+                    record["position"], record["publication_role"],
+                    record["published_text"], record["applicability"],
+                    record["source_segment_id"], record["source_ref"],
+                    record["source_version"], record["source_digest"],
+                    record["visibility_scope"], record["scope_organization_ids"],
+                    record["effective_at"], record["expires_at"],
+                    record["authority_class"], record["semantic_subject_type"],
+                    record["semantic_subject_id"], record["claim_key"],
+                ),
+            )
+
+    def _create_brand_publication_candidate_v2(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        projection_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                "SELECT id FROM brands WHERE tenant_id = %s AND id = %s FOR UPDATE",
+                (scope.tenant_id, scope.brand_id),
+            )
+            self._one(cursor, "找不到当前品牌")
+            digest_items, stored_items = self._prepare_v2_publication_items(cursor, scope, items)
+            cursor.execute(
+                "SELECT COALESCE(max(version_number), 0) + 1 AS next_version "
+                "FROM brand_publication_projections WHERE tenant_id = %s AND brand_id = %s",
+                (scope.tenant_id, scope.brand_id),
+            )
+            version = self._integer(self._one(cursor, "无法计算发布版本")["next_version"])
+            digest = publication_projection_v2_digest(digest_items)
+            cursor.execute(
+                """
+                INSERT INTO brand_publication_projections
+                    (id, tenant_id, brand_id, version_number, status,
+                     digest, created_by, contract_version)
+                VALUES (%s, %s, %s, %s, 'candidate', %s, %s,
+                        'brand-publication-projection-v2')
+                """,
+                (projection_id, scope.tenant_id, scope.brand_id, version, digest, scope.user_id),
+            )
+            self._insert_v2_publication_items(cursor, scope, projection_id, stored_items)
+            self._event(
+                cursor,
+                scope,
+                "brand_publication.candidate_created",
+                "brand_publication_projection",
+                projection_id,
+            )
+        return {
+            "id": str(projection_id),
+            "version": version,
+            "status": "candidate",
+            "digest": digest,
+            "contract_version": "brand-publication-projection-v2",
+            "item_count": len(stored_items),
+            "items": [dict(item) for item in digest_items],
+        }
+
+    @staticmethod
+    def _uses_v2_publication_contract(items: tuple[dict[str, object], ...]) -> bool:
+        v2_fields = {"visibility_scope", "organization_ids", "effective_at"}
+        v2_items = tuple(v2_fields <= item.keys() for item in items)
+        if v2_items and all(v2_items):
+            return True
+        if any(v2_fields & item.keys() for item in items):
+            raise DomainError("发布表达不能混用 V1 与 V2 条目合同。")
+        return False
+
+    def create_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        if self._uses_v2_publication_contract(items):
+            return self._create_brand_publication_candidate_v2(scope, items)
+        if not items or len(items) > 64:
+            raise DomainError("品牌发布表达需要 1 到 64 条经过核对的内容。")
+        source_ids = [UUID(str(item["source_segment_id"])) for item in items]
+        if len(set(source_ids)) != len(source_ids):
+            raise DomainError("同一个来源片段不能在一个发布版本中重复使用。")
         projection_id = uuid4()
         with self._management_tx(scope) as cursor:
             cursor.execute(
@@ -2118,7 +2465,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 if not isinstance(raw_applicability, (list, tuple)):
                     raise DomainError("发布表达的适用内容无效。")
                 applicability = tuple(dict.fromkeys(str(value) for value in raw_applicability))
-                if any(value not in allowed_products for value in applicability):
+                if any(value not in _PUBLICATION_PRODUCTS for value in applicability):
                     raise DomainError("发布表达包含未知内容用途。")
                 if role != "internal_only" and not applicability:
                     raise DomainError("请明确这条品牌表达适用于哪些内容。")
@@ -2311,6 +2658,307 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "status": "confirmed",
             "digest": str(candidate["digest"]),
             "item_count": self._integer(counts["item_count"]),
+        }
+
+    @staticmethod
+    def _feedback_observation_digest(
+        scope: TenantManagementScope,
+        source_task_id: UUID,
+        source_version_id: UUID | None,
+        source_account_id: UUID,
+        observation_payload: dict[str, object],
+    ) -> str:
+        document = {
+            "contract_version": "brand-feedback-observation-v1",
+            "tenant_id": str(scope.tenant_id),
+            "brand_id": str(scope.brand_id),
+            "source_task_id": str(source_task_id),
+            "source_version_id": str(source_version_id) if source_version_id is not None else None,
+            "source_account_id": str(source_account_id),
+            "actor_id": str(scope.user_id),
+            "observation_payload": observation_payload,
+        }
+        try:
+            encoded = json.dumps(document, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+        except (TypeError, ValueError) as exc:
+            raise DomainError("反馈观察必须是可持久化的结构化数据。") from exc
+        return hashlib.sha256(encoded).hexdigest()
+
+    @classmethod
+    def _validate_feedback_source(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        task_id: UUID,
+        version_id: UUID | None,
+        account_id: UUID,
+    ) -> None:
+        cursor.execute(
+            "SELECT task.id FROM business_tasks task JOIN content_accounts account "
+            "ON account.tenant_id=task.tenant_id AND account.brand_id=task.brand_id "
+            "AND account.id=task.logical_account_id WHERE task.tenant_id=%s "
+            "AND task.brand_id=%s AND task.id=%s AND task.logical_account_id=%s",
+            (scope.tenant_id, scope.brand_id, task_id, account_id),
+        )
+        cls._one(cursor, "反馈只能关联当前品牌的真实任务和逻辑账号。")
+        if version_id is not None:
+            cursor.execute(
+                "SELECT id FROM content_versions WHERE tenant_id=%s AND task_id=%s AND id=%s",
+                (scope.tenant_id, task_id, version_id),
+            )
+            cls._one(cursor, "反馈版本不属于所选任务。")
+
+    @classmethod
+    def _insert_feedback_observation(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        observation_id: UUID,
+        source_task_id: UUID,
+        source_version_id: UUID | None,
+        source_account_id: UUID,
+        observation_payload: dict[str, object],
+        digest: str,
+    ) -> str:
+        cursor.execute(
+            """
+            INSERT INTO brand_feedback_observations
+                (id, tenant_id, brand_id, source_task_id, source_version_id,
+                 source_account_id, actor_id, observation_payload,
+                 candidate_status, observation_digest)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'candidate', %s)
+            RETURNING recorded_at
+            """,
+            (
+                observation_id, scope.tenant_id, scope.brand_id,
+                source_task_id, source_version_id, source_account_id,
+                scope.user_id, Jsonb(observation_payload), digest,
+            ),
+        )
+        return cls._time(cls._one(cursor, "反馈观察没有保存成功。")["recorded_at"])
+
+    def create_brand_feedback_observation(
+        self,
+        scope: TenantManagementScope,
+        source_task_id: UUID,
+        source_version_id: UUID | None,
+        source_account_id: UUID,
+        observation_payload: dict[str, object],
+    ) -> dict[str, object]:
+        observation_id = uuid4()
+        digest = self._feedback_observation_digest(
+            scope, source_task_id, source_version_id, source_account_id, observation_payload
+        )
+        with self._management_tx(scope) as cursor:
+            self._validate_feedback_source(
+                cursor, scope, source_task_id, source_version_id, source_account_id
+            )
+            recorded_at = self._insert_feedback_observation(
+                cursor, scope, observation_id, source_task_id, source_version_id,
+                source_account_id, observation_payload, digest,
+            )
+            self._event(
+                cursor,
+                scope,
+                "brand_feedback.observation_recorded",
+                "brand_feedback_observation",
+                observation_id,
+            )
+        return {
+            "id": str(observation_id),
+            "candidate_status": "candidate",
+            "observation_digest": digest,
+            "recorded_at": recorded_at,
+            "promoted_to_formal_source": False,
+        }
+
+    def brand_feedback_observations(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT observation.id, observation.source_task_id,
+                       observation.source_version_id,
+                       observation.source_account_id,
+                       account.name AS source_account_name,
+                       observation.actor_id,
+                       actor.display_name AS actor_name,
+                       observation.observation_payload,
+                       observation.candidate_status,
+                       observation.observation_digest,
+                       observation.recorded_at
+                  FROM brand_feedback_observations observation
+                  JOIN content_accounts account
+                    ON account.tenant_id = observation.tenant_id
+                   AND account.brand_id = observation.brand_id
+                   AND account.id = observation.source_account_id
+                  JOIN users actor
+                    ON actor.tenant_id = observation.tenant_id
+                   AND actor.id = observation.actor_id
+                 WHERE observation.tenant_id = %s
+                   AND observation.brand_id = %s
+                 ORDER BY observation.recorded_at DESC, observation.id
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            rows = cursor.fetchall()
+        return [
+            {
+                "id": str(row["id"]),
+                "source_task_id": str(row["source_task_id"]),
+                "source_version_id": (
+                    str(row["source_version_id"]) if row["source_version_id"] is not None else None
+                ),
+                "source_account_id": str(row["source_account_id"]),
+                "source_account_name": str(row["source_account_name"]),
+                "actor_id": str(row["actor_id"]),
+                "actor_name": str(row["actor_name"]),
+                "observation_payload": (
+                    dict(row["observation_payload"])
+                    if isinstance(row["observation_payload"], dict)
+                    else {}
+                ),
+                "candidate_status": str(row["candidate_status"]),
+                "observation_digest": str(row["observation_digest"]),
+                "recorded_at": self._time(row["recorded_at"]),
+                "promoted_to_formal_source": False,
+            }
+            for row in rows
+        ]
+
+    @staticmethod
+    def _authorization_governance_rows(
+        cursor: psycopg.Cursor[dict[str, object]], scope: TenantManagementScope
+    ) -> list[dict[str, object]]:
+        cursor.execute(
+            """
+            SELECT authz.id, authz.subject_ref, authz.authorization_version,
+                   authz.logical_account_id, authz.organization_id,
+                   authz.allowed_usage, authz.single_use, authz.effective_at,
+                   authz.expires_at, authz.authorization_state, authz.digest,
+                   reservation.status AS reservation_status,
+                   reservation.task_lineage_id
+              FROM content_authorizations authz
+              LEFT JOIN content_authorization_reservations reservation
+                ON reservation.tenant_id = authz.tenant_id
+               AND reservation.brand_id = authz.brand_id
+               AND reservation.authorization_id = authz.id
+             WHERE authz.tenant_id = %s AND authz.brand_id = %s
+             ORDER BY authz.subject_ref, authz.id
+            """,
+            (scope.tenant_id, scope.brand_id),
+        )
+        return cursor.fetchall()
+
+    @staticmethod
+    def _qualification_governance_rows(
+        cursor: psycopg.Cursor[dict[str, object]], scope: TenantManagementScope
+    ) -> list[dict[str, object]]:
+        cursor.execute(
+            """
+            SELECT qualification.id, qualification.path_family,
+                   qualification.projection_id, qualification.projection_item_id,
+                   qualification.organization_id, qualification.involves_person,
+                   qualification.authorization_id, qualification.qualification_version,
+                   qualification.source_digest, qualification.digest,
+                   projection.status AS projection_status,
+                   authz.authorization_state,
+                   authz.effective_at AS authorization_effective_at,
+                   authz.expires_at AS authorization_expires_at
+              FROM brand_relevance_qualifications qualification
+              JOIN brand_publication_projections projection
+                ON projection.tenant_id=qualification.tenant_id
+               AND projection.brand_id=qualification.brand_id
+               AND projection.id=qualification.projection_id
+              LEFT JOIN content_authorizations authz
+                ON authz.tenant_id=qualification.tenant_id
+               AND authz.brand_id=qualification.brand_id
+               AND authz.id=qualification.authorization_id
+             WHERE qualification.tenant_id=%s AND qualification.brand_id=%s
+             ORDER BY qualification.path_family, qualification.id
+            """,
+            (scope.tenant_id, scope.brand_id),
+        )
+        return cursor.fetchall()
+
+    @staticmethod
+    def _authorization_governance_item(
+        row: dict[str, object], now: datetime
+    ) -> dict[str, object]:
+        effective_at, expires_at = row["effective_at"], row["expires_at"]
+        reasons: list[str] = []
+        if str(row["authorization_state"]) != "active":
+            reasons.append("authorization_not_active")
+        if not isinstance(effective_at, datetime) or effective_at > now:
+            reasons.append("authorization_not_effective")
+        if expires_at is not None and (not isinstance(expires_at, datetime) or now >= expires_at):
+            reasons.append("authorization_expired")
+        if str(row["reservation_status"] or "") == "consumed":
+            reasons.append("single_use_consumed")
+        usages = row["allowed_usage"] if isinstance(row["allowed_usage"], list) else []
+        reservation = row["reservation_status"]
+        lineage = row["task_lineage_id"]
+        return {
+            "authorization_id": str(row["id"]),
+            "subject_ref": str(row["subject_ref"]),
+            "authorization_version": str(row["authorization_version"]),
+            "logical_account_id": str(row["logical_account_id"]),
+            "organization_id": str(row["organization_id"]),
+            "allowed_usage": [str(value) for value in usages],
+            "single_use": bool(row["single_use"]),
+            "state": "available" if not reasons else "unavailable",
+            "unavailable_reasons": reasons,
+            "reservation_status": str(reservation) if reservation is not None else None,
+            "task_lineage_id": str(lineage) if lineage is not None else None,
+            "digest": str(row["digest"]),
+        }
+
+    @staticmethod
+    def _qualification_governance_item(
+        row: dict[str, object], now: datetime
+    ) -> dict[str, object]:
+        required = str(row["path_family"]) == "organization_people" or bool(row["involves_person"])
+        effective_at = row["authorization_effective_at"]
+        expires_at = row["authorization_expires_at"]
+        reasons: list[str] = []
+        if str(row["projection_status"]) != "confirmed":
+            reasons.append("projection_not_confirmed")
+        if required and row["authorization_id"] is None:
+            reasons.append("authorization_missing")
+        if required and str(row["authorization_state"] or "") != "active":
+            reasons.append("authorization_not_active")
+        if required and (not isinstance(effective_at, datetime) or effective_at > now):
+            reasons.append("authorization_not_effective")
+        if required and expires_at is not None and (
+            not isinstance(expires_at, datetime) or now >= expires_at
+        ):
+            reasons.append("authorization_expired")
+        authorization_id = row["authorization_id"]
+        return {
+            "qualification_id": str(row["id"]),
+            "path_family": str(row["path_family"]),
+            "projection_id": str(row["projection_id"]),
+            "projection_item_id": str(row["projection_item_id"]),
+            "organization_id": str(row["organization_id"]),
+            "involves_person": bool(row["involves_person"]),
+            "authorization_id": str(authorization_id) if authorization_id is not None else None,
+            "qualification_version": str(row["qualification_version"]),
+            "source_digest": str(row["source_digest"]),
+            "digest": str(row["digest"]),
+            "state": "available" if not reasons else "unavailable",
+            "unavailable_reasons": reasons,
+        }
+
+    def brand_relevance_governance(self, scope: TenantManagementScope) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            authorization_rows = self._authorization_governance_rows(cursor, scope)
+            qualification_rows = self._qualification_governance_rows(cursor, scope)
+        now = datetime.now().astimezone()
+        return {
+            "authorizations": [self._authorization_governance_item(row, now) for row in authorization_rows],
+            "qualifications": [self._qualification_governance_item(row, now) for row in qualification_rows],
         }
 
     def create_management_organization_material(

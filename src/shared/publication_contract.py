@@ -138,6 +138,7 @@ class ProductDecisionBasisRefV2:
     source_packet_digest: str | None = None
     judgment_ref: str | None = None
     judgment_version: str | None = None
+    judgment_digest: str | None = None
     applicability_conditions: tuple[str, ...] = ()
 
 
@@ -220,6 +221,8 @@ def _extend_publication_v3_document(
                 "applicability_conditions": list(product_basis.applicability_conditions),
             }
         )
+        if product_basis.judgment_digest is not None:
+            raw_product["judgment_digest"] = product_basis.judgment_digest
     if contract.account_editorial_resolution is not None:
         from src.shared.account_editorial_lens import account_editorial_resolution_document
 
@@ -774,6 +777,7 @@ def _publication_contract_v3_from_document(
             source_packet_digest=_optional_sha256(raw_product.get("source_packet_digest")),
             judgment_ref=_optional_string(raw_product.get("judgment_ref")),
             judgment_version=_optional_string(raw_product.get("judgment_version")),
+            judgment_digest=_optional_sha256(raw_product.get("judgment_digest")),
             applicability_conditions=_string_tuple_allow_empty(raw_product.get("applicability_conditions", [])),
         )
     series_delta: SeriesDeltaV1 | None = None

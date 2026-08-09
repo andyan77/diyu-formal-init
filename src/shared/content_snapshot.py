@@ -306,6 +306,18 @@ def frozen_product_facts(snapshot: Mapping[str, object]) -> tuple[ProductFact, .
                 applicability=str(raw.get("applicability") or ""),
                 product_id=(UUID(str(raw["product_id"])) if raw.get("product_id") else None),
                 product_version_id=(UUID(str(raw["product_version_id"])) if raw.get("product_version_id") else None),
+                judgment_ref=(str(raw["judgment_ref"]) if raw.get("judgment_ref") else None),
+                judgment_version=(
+                    str(raw["judgment_version"]) if raw.get("judgment_version") else None
+                ),
+                judgment_digest=(
+                    str(raw["judgment_digest"]) if raw.get("judgment_digest") else None
+                ),
+                judgment_applicability_conditions=tuple(
+                    str(item)
+                    for item in raw.get("judgment_applicability_conditions", [])
+                    if isinstance(item, str) and item
+                ),
             )
         )
     return tuple(products)

@@ -69,7 +69,7 @@ def _product_basis_document(
     basis: ProductDecisionBasisV2 | None,
 ) -> dict[str, object] | None:
     if isinstance(basis, P1ProductDecisionBasisV3):
-        return {
+        p1_document: dict[str, object] = {
             "contract_version": basis.contract_version,
             "decision_axis": basis.decision_axis,
             "product_specific_understanding": basis.product_specific_understanding,
@@ -81,14 +81,27 @@ def _product_basis_document(
             "judgment_version": basis.judgment_version,
             "applicability_conditions": list(basis.applicability_conditions),
         }
+        if basis.judgment_digest is not None:
+            p1_document["judgment_digest"] = basis.judgment_digest
+        return p1_document
     if isinstance(basis, P2ProductDecisionBasisV2):
-        return {
+        p2_document: dict[str, object] = {
             "decision_axis": basis.decision_axis,
             "product_specific_understanding": basis.product_specific_understanding,
             "tradeoff": basis.tradeoff,
             "condition_of_validity": basis.condition_of_validity,
             "supporting_fact_refs": list(basis.supporting_fact_refs),
         }
+        if basis.judgment_ref is not None:
+            p2_document.update(
+                {
+                    "judgment_ref": basis.judgment_ref,
+                    "judgment_version": basis.judgment_version,
+                    "judgment_digest": basis.judgment_digest,
+                    "applicability_conditions": list(basis.applicability_conditions),
+                }
+            )
+        return p2_document
     if isinstance(basis, P5ProductDecisionBasisV2):
         return {
             "product_specific_understanding": basis.product_specific_understanding,

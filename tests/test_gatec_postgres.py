@@ -815,12 +815,14 @@ def _authorization(
     *,
     authorization_id: UUID,
     source_digest: str,
+    authorization_version: str = "v1",
+    single_use: bool = True,
 ) -> AuthorizationContractV1:
     effective = datetime.now(timezone.utc) - timedelta(days=1)
     unsigned = AuthorizationContractV1(
         contract_version=AUTHORIZATION_CONTRACT_VERSION,
         authorization_id=str(authorization_id),
-        authorization_version="v1",
+        authorization_version=authorization_version,
         subject_ref=f"person:{authorization_id}",
         tenant_id=str(fixture.tenant_id),
         brand_id=str(fixture.brand_id),
@@ -828,7 +830,7 @@ def _authorization(
         organization_id=str(fixture.store_a_id),
         allowed_source_digest=source_digest,
         allowed_usage=("organization_people", "local_trust"),
-        single_use=True,
+        single_use=single_use,
         effective_at=effective.isoformat(),
         expires_at=(effective + timedelta(days=365)).isoformat(),
         digest="",
@@ -848,7 +850,7 @@ def _insert_authorization(
             subject_ref, authorization_version, allowed_source_digest,
             allowed_usage, single_use, effective_at, expires_at, digest,
             recorded_by
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, true,
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                   %s, %s, %s, %s)
         """,
         (
@@ -861,6 +863,7 @@ def _insert_authorization(
             contract.authorization_version,
             contract.allowed_source_digest,
             list(contract.allowed_usage),
+            contract.single_use,
             datetime.fromisoformat(contract.effective_at),
             datetime.fromisoformat(cast(str, contract.expires_at)),
             contract.digest,
@@ -999,6 +1002,81 @@ def test_single_use_authorization_is_consumed_once_per_task_lineage(
         )
         counts = {str(row["event_type"]): int(str(row["count"])) for row in cursor.fetchall()}
     assert counts == {"reserved": 2, "released": 1, "consumed": 1}
+
+
+@pytest.mark.parametrize("source_digest", ("3" * 64, "4" * 64))
+def test_repeatable_authorization_opens_independent_tasks_without_consumption(
+    app_database_url: str,
+    gatec_fixture: GateCFixture,
+    source_digest: str,
+) -> None:
+    repository = PostgresContentRepository(app_database_url)
+    authorization = _authorization(
+        gatec_fixture,
+        authorization_id=uuid4(),
+        source_digest=source_digest,
+        authorization_version="v2",
+        single_use=False,
+    )
+    scope = TrustedScope(
+        gatec_fixture.tenant_id,
+        gatec_fixture.user_a_id,
+        gatec_fixture.brand_id,
+        gatec_fixture.carrier_store_a_id,
+    )
+    snapshot: dict[str, object] = {
+        "task_context_as_of": datetime.now(timezone.utc).isoformat(),
+        "publication_contract": {
+            "brand_relevance_evidence": {
+                "authorization": authorization_contract_document(authorization),
+            }
+        },
+    }
+    with repository._tx(scope) as cursor:
+        _insert_authorization(cursor, gatec_fixture, authorization)
+        task_ids: list[UUID] = []
+        for _index in range(2):
+            task_id, run_id = _authorization_task(
+                cursor,
+                gatec_fixture,
+                user_id=scope.user_id,
+            )
+            repository._reserve_task_authorization(
+                cursor,
+                scope,
+                task_id=task_id,
+                run_id=run_id,
+                logical_account_id=gatec_fixture.root_store_a_id,
+                task_lineage_id=task_id,
+                snapshot=snapshot,
+            )
+            repository._consume_task_authorization(
+                cursor,
+                scope,
+                task_id=task_id,
+                run_id=run_id,
+            )
+            task_ids.append(task_id)
+        cursor.execute(
+            "SELECT count(*) FROM content_authorization_reservations "
+            "WHERE tenant_id=%s AND authorization_id=%s",
+            (gatec_fixture.tenant_id, UUID(authorization.authorization_id)),
+        )
+        reservation_row = cursor.fetchone()
+        assert reservation_row is not None
+        reservation_count = int(str(reservation_row["count"]))
+        cursor.execute(
+            "SELECT count(*) FROM content_authorization_events "
+            "WHERE tenant_id=%s AND authorization_id=%s",
+            (gatec_fixture.tenant_id, UUID(authorization.authorization_id)),
+        )
+        event_row = cursor.fetchone()
+        assert event_row is not None
+        event_count = int(str(event_row["count"]))
+
+    assert len(task_ids) == 2
+    assert reservation_count == 0
+    assert event_count == 0
 
 
 def test_two_users_share_logical_account_but_not_each_others_tasks(

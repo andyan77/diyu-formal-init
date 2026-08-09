@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
@@ -51,8 +52,10 @@ from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import (
     brand_fact_records,
     build_product_fact_packet,
+    performance_term_review_annotations,
     product_fact_records,
     select_product_fact_block_ids,
+    unconfirmed_product_specificity_spans,
 )
 from src.shared.media_program import (
     build_media_capability_envelope,
@@ -67,7 +70,10 @@ from src.shared.narrative import (
     user_fact_candidates,
     visible_digest,
 )
-from src.shared.product_value import build_product_decision_basis_v2
+from src.shared.product_value import (
+    P2ProductDecisionBasisV2,
+    build_product_decision_basis_v2,
+)
 from src.shared.publication_contract import (
     USER_ACTUALITY_DOMAIN_ELABORATION,
     USER_ACTUALITY_HARD_FACT_BOUNDARY,
@@ -116,10 +122,12 @@ class FakeResponse:
         status_code: int,
         payload: dict[str, Any],
         headers: dict[str, str] | None = None,
+        content: bytes | None = None,
     ) -> None:
         self.status_code = status_code
         self._payload = payload
         self.headers = headers or {}
+        self.content = json.dumps(payload).encode() if content is None else content
 
     def json(self) -> dict[str, Any]:
         return self._payload
@@ -128,9 +136,10 @@ class FakeResponse:
 class FakeClient:
     responses: list[FakeResponse] = []
     requests: list[dict[str, object]] = []
+    init_kwargs: list[dict[str, object]] = []
 
-    def __init__(self, **_: object) -> None:
-        pass
+    def __init__(self, **kwargs: object) -> None:
+        self.init_kwargs.append(kwargs)
 
     def __enter__(self) -> FakeClient:
         return self
@@ -216,16 +225,22 @@ class FakeReviewerProvider(ReviewerProvider):
 def _fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.responses = []
     FakeClient.requests = []
+    FakeClient.init_kwargs = []
     monkeypatch.setattr(httpx, "Client", FakeClient)
 
 
-def _generator(*, max_retries: int = 0) -> DeepSeekGenerator:
+def _generator(
+    *,
+    max_retries: int = 0,
+    transport_max_retries: int = 0,
+) -> DeepSeekGenerator:
     return DeepSeekGenerator(
         "https://example.invalid",
         "test-key",
         "deepseek-test",
         reviewer_provider=FakeReviewerProvider(),
         max_retries=max_retries,
+        transport_max_retries=transport_max_retries,
     )
 
 
@@ -1126,12 +1141,11 @@ def test_publication_v3_rejects_internal_product_plan_copy_and_owned_fields(
         output,
         creative_body="计划复制测试商品可以先从两种颜色的差异开始看。",
     )
-    with pytest.raises(GenerationFailed, match="不得复述或改写服务端商品事实块"):
-        DeepSeekGenerator._assert_writer_output_v3_boundaries(
-            fact_copy,
-            context=context,
-            product_basis=basis,
-        )
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        fact_copy,
+        context=context,
+        product_basis=basis,
+    )
 
     FakeClient.responses = [
         _completion(
@@ -1146,6 +1160,405 @@ def test_publication_v3_rejects_internal_product_plan_copy_and_owned_fields(
     ]
     with pytest.raises(GenerationFailed, match="Writer 返回结构不完整"):
         _generator().generate(request)
+
+
+def _gate_d_s04_product_boundary() -> tuple[
+    BoundaryContext,
+    P2ProductDecisionBasisV2,
+]:
+    product = ProductFact(
+        sku="DIYU-CSPU-008",
+        display_name="女童灰色松弛针织开衫",
+        facts={
+            "entity_kind": "apparel_product",
+            "category": "针织开衫",
+            "main_color": "灰色",
+        },
+        source_kind="gatea_verified_visual",
+        judgment_ref="J-CSPU-008",
+        judgment_version="v1",
+        judgment_digest="a" * 64,
+        judgment_applicability_conditions=(
+            "用途是室内外切换而非高强度户外",
+            "家庭接受针织挂放和清洗方式",
+            "需要层次而非轮廓支撑",
+        ),
+    )
+    basis = build_product_decision_basis_v2(
+        primary_product="product_truth",
+        products=(product,),
+    )
+    assert isinstance(basis, P2ProductDecisionBasisV2)
+    fact_ids = tuple(record.fact_id for record in product_fact_records(product))
+    request = replace(
+        _publication_v3_request(),
+        products=(product,),
+        narrative_frame=new_frame("general_observation", (), fact_ids),
+    )
+    assert request.narrative_frame is not None
+    return BoundaryContext.from_request(request, request.narrative_frame), basis
+
+
+def test_publication_v3_allows_confirmed_v_facts_and_prior_s04_response() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (Path(__file__).parent / "fixtures/gated_s04_p2_rejected_writer_output_v1.json").read_text(encoding="utf-8")
+    )
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="已确认事实可以直接说",
+        natural_guide="把已确认信息说清楚。",
+        creative_body=str(raw["machine_boundary_excerpt"]),
+        publication_caption="未确认的不作确定表述。",
+    )
+
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+    assert raw["prior_response_sha256"] == ("4cb0ed314c93957a046f5447e7c349565de3f8f3089f8ffdabaf61ad444de33f")
+    assert raw["review_only_excerpts"] == [
+        "它提供的是层次感",
+        "在店里整理货架的时候",
+    ]
+
+
+def test_publication_v3_allows_exact_confirmed_category_and_color() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="针织开衫，先看灰色",
+        natural_guide="这是一件针织开衫，已确认的主色是灰色。",
+        creative_body="品类是针织开衫，主色是灰色；未确认的信息不作确定表述。",
+        publication_caption="针织开衫和灰色，都是已确认信息。",
+    )
+
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+@pytest.mark.parametrize(
+    "soft_experience_text",
+    (
+        "日常穿着会觉得耐穿一些。",
+        "灰色针织开衫在日常选择里比较百搭。",
+        "如果你更在意好打理，可以把这一点放进自己的取舍。",
+        "这个灰色看起来显精神。",
+    ),
+)
+def test_publication_v3_allows_l2_soft_experience_words(
+    soft_experience_text: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="给日常选择留一点弹性",
+        natural_guide="软性体验表达不取得商品事实资格。",
+        creative_body=soft_experience_text,
+        publication_caption="最终仍按自己的穿着条件判断。",
+    )
+
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+def test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (Path(__file__).parent / "fixtures/gated_s01_p1_rejected_writer_output_v2.json").read_text(encoding="utf-8")
+    )
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="资料边界要说清楚",
+        natural_guide="把已确认和未确认的信息分开。",
+        creative_body=str(raw["machine_boundary_excerpt"]),
+        publication_caption="没有依据的具体信息不作保证。",
+    )
+
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+    assert raw["prior_response_sha256"] == ("1ea7e83c9c5241511ee3ea07a0b9684b90994d1d6022e8009082125a26af1d64")
+    assert raw["founder_classification"] == "L2_soft_experience_allowed"
+
+
+@pytest.mark.parametrize(
+    "suggestion_text",
+    (
+        "整套搭配里最好不要再出现第二个强色。",
+        "先看这一眼。",
+    ),
+)
+def test_publication_v3_allows_ambiguous_daily_suggestion_words(
+    suggestion_text: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="先看搭配条件",
+        natural_guide="日常建议不是商品品质的超级断言。",
+        creative_body=suggestion_text,
+        publication_caption="按整套搭配的实际情况决定。",
+    )
+
+    assert unconfirmed_product_specificity_spans(suggestion_text) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+def test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (Path(__file__).parent / "fixtures/gated_s01_p2_absolute_claim_false_positive_v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    excerpt = str(raw["machine_boundary_excerpt"])
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="把强色留给主角",
+        natural_guide="条件建议保持在整套搭配侧。",
+        creative_body=excerpt,
+        publication_caption="按自己的整套搭配决定。",
+    )
+
+    assert unconfirmed_product_specificity_spans(excerpt) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+    assert raw["prior_response_sha256"] == ("b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004")
+    assert raw["founder_classification"] == "L3_daily_suggestion_allowed"
+
+
+def test_publication_v3_allows_prior_s05_r01_negated_performance_boundary() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (Path(__file__).parent / "fixtures/gated_s05_r01_p1_negated_performance_v1.json").read_text(encoding="utf-8")
+    )
+    excerpt = str(raw["machine_boundary_excerpt"])
+    assert excerpt == "如果你需要的是防风防水的功能外套，那它就不是那个答案"
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="先把能力边界说清楚",
+        natural_guide="这是一条否定式商品边界，不是性能承诺。",
+        creative_body=excerpt,
+        publication_caption="按自己的真实用途选择。",
+    )
+
+    assert unconfirmed_product_specificity_spans(excerpt) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+    assert raw["prior_guard_match"] == "guaranteed_performance_assertion:防水"
+    assert raw["prior_response_sha256"] == ("52e4e3a0ec2a73db75e28f16888dcbe859fccb77bb82a85abf8b3deaf0d51798")
+
+
+def test_bare_performance_terms_are_non_blocking_review_annotations() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    text = "这件外套防水又耐磨。"
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="进入人工复核",
+        natural_guide="裸性能词不再由机器判断极性。",
+        creative_body=text,
+        publication_caption="由 founder 逐篇复核。",
+    )
+
+    assert unconfirmed_product_specificity_spans(text) == ()
+    assert [(annotation.term, annotation.sentence) for annotation in performance_term_review_annotations(text)] == [
+        ("防水", text),
+        ("耐磨", text),
+    ]
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+@pytest.mark.parametrize(
+    "negative_boundary",
+    (
+        "这件商品不能保证防水。",
+        "这件商品并非100%防水。",
+        "这件商品不是绝对不起球。",
+    ),
+)
+def test_negated_guarantee_phrases_do_not_become_affirmative_machine_claims(
+    negative_boundary: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="说清未确认能力",
+        natural_guide="否定式边界不是肯定式保证。",
+        creative_body=negative_boundary,
+        publication_caption="不把未确认能力写成卖点。",
+    )
+
+    assert unconfirmed_product_specificity_spans(negative_boundary) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+@pytest.mark.parametrize(
+    "unsupported_text",
+    (
+        "这件商品的主色是黑色。",
+        "面料成分为棉55%、腈纶45%。",
+        "本店售价459元。",
+        "采用全成型无缝针织工艺。",
+        "适穿年龄为3—12岁。",
+        "这件商品保证耐穿。",
+        "这件商品保证防水。",
+        "这件商品100%防水。",
+        "这件商品100%纯棉。",
+        "这件商品永不变形。",
+        "这件商品绝对不起球。",
+    ),
+)
+def test_publication_v3_rejects_changed_or_unconfirmed_product_specifics(
+    unsupported_text: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="先看已经确认的信息",
+        natural_guide="把商品信息和选择条件分开看。",
+        creative_body=unsupported_text,
+        publication_caption="保留自己的判断。",
+    )
+
+    with pytest.raises(
+        GenerationFailed,
+        match="改写了已确认商品事实|新增了未确认商品具体信息",
+    ):
+        DeepSeekGenerator._assert_writer_output_v3_boundaries(
+            output,
+            context=context,
+            product_basis=basis,
+        )
+
+
+def test_publication_v3_product_prompt_exposes_confirmed_values_and_keeps_j_conditional() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    base = _publication_v3_request()
+    contract = cast(PublicationContractV3, base.publication_contract)
+    writer_request = replace(
+        build_writer_request_v3(
+            contract,
+            product_decision_basis=None,
+            platform_expression_responsibility=base.platform_direction.direction,
+            prior_output=None,
+            revision_instruction=None,
+        ),
+        product_decision_basis={"applicability_conditions": list(basis.applicability_conditions)},
+    )
+    projection = DeepSeekGenerator._confirmed_product_fact_projection(
+        context.product_fact_packet,
+        basis,
+    )
+
+    prompt = _generator()._writer_request_v3_prompt(
+        writer_request,
+        confirmed_product_facts=projection,
+    )
+
+    assert "针织开衫" in prompt
+    assert "灰色" in prompt
+    assert "主色已经确认’却隐去颜色" in prompt
+    assert "ADJ-WRITER-BOUNDARY-05 性能词极性收口" in prompt
+    assert "L1 硬断言" in prompt
+    assert "未经确认的性能词只可用于" in prompt
+    assert "否定式或边界式说明" in prompt
+    assert "如果你要 X，它不是答案" in prompt
+    assert "保证／100%／永不／绝不／绝对" in prompt
+    assert "最舒适／业内第一／全网最好" in prompt
+    assert "最好不要／最好先／第一眼" in prompt
+    assert "L2 是不取得事实资格的软性体验表达" in prompt
+    assert "耐穿／百搭／好打理／显精神" in prompt
+    assert "不得写入 ProductFact" in prompt
+    assert "L3 判断只保持条件语态" in prompt
+    assert "如果你需要／如果你的条件是" in prompt
+    assert "它适合／它提供／它能带来" in prompt
+    assert "PS-S02-/PS-S04-" in prompt
+    assert "我在店里" in prompt
+
+
+def test_publication_v3_still_rejects_exact_account_profile_copy() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    profile_span = "只讲自己经手的本店事实，不代表门店经营结论"
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="先看已经确认的信息",
+        natural_guide="把商品信息和选择条件分开看。",
+        creative_body=f"这个账号{profile_span}。",
+        publication_caption="保留自己的判断。",
+    )
+
+    with pytest.raises(GenerationFailed, match="不得逐字复制账号画像"):
+        DeepSeekGenerator._assert_writer_output_v3_boundaries(
+            output,
+            context=context,
+            product_basis=basis,
+            account_profile_spans=(profile_span,),
+        )
+
+
+def test_publication_v3_freezes_authorized_persona_quote_id_in_snapshot() -> None:
+    base = _publication_v3_request()
+    quote_id = "PS-S04-01"
+    contract = replace(
+        cast(PublicationContractV3, base.publication_contract),
+        topic="围绕授权原句形成一条克制的生活观察",
+        frozen_fact_refs=(quote_id,),
+        brand_context_use=BrandContextUseV3(
+            available_refs=(quote_id,),
+            frozen_refs=(quote_id,),
+            consumed_refs=(quote_id,),
+            displayed_refs=(),
+        ),
+    )
+    request = replace(
+        base,
+        publication_contract=contract,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "好看之外，还要不要现在决定",
+                "natural_guide": "把选择中的犹豫留在画面里。",
+                "creative_body": "有些选择需要的不是催促，而是把眼前条件慢慢看清。",
+                "publication_caption": "不急着替别人做决定。",
+            }
+        )
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert artifact.completion_snapshot_patch is not None
+    assert artifact.completion_snapshot_patch["used_persona_quote_ids"] == [quote_id]
 
 
 def _kernel_writer(
@@ -2474,22 +2887,90 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
     assert {record.exact_text for record in context.fact_registry if record.fact_kind == "product"} == set(claims)
 
 
-def test_route_and_transport_only_retry_429_or_transport(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_provider_nonempty_error_response_is_never_transport_retried() -> None:
     FakeClient.responses = [
         FakeResponse(429, {}, {"Retry-After": "0"}),
         _completion({"primary_value": "建立人格"}),
     ]
-    monkeypatch.setattr("src.tool.llm_gateway.deepseek.time.sleep", lambda _: None)
-    result = _generator(max_retries=1).route(
-        RoutingInput(
-            "今天不知道发什么，帮我做条小红书。",
-            _brand(),
-            (),
-        )
+
+    with pytest.raises(ProviderRequestFailure) as captured:
+        _generator(transport_max_retries=2)._request("system", "prompt", 20)
+
+    assert captured.value.kind == "http_unavailable_response"
+    assert captured.value.response_received is True
+    assert captured.value.retry_count == 0
+    assert len(FakeClient.requests) == 1
+    assert len(FakeClient.responses) == 1
+
+
+def test_provider_valid_content_response_is_never_retried() -> None:
+    accepted = _completion({"primary_value": "建立人格"})
+    FakeClient.responses = [
+        accepted,
+        _completion({"primary_value": "解释商品"}),
+    ]
+
+    response, retries = _generator(transport_max_retries=2)._request(
+        "system", "prompt", 20
     )
+
+    assert response is accepted._payload
+    assert retries == 0
+    assert len(FakeClient.requests) == 1
+    assert len(FakeClient.responses) == 1
+
+
+def test_provider_client_ignores_polluted_proxy_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALL_PROXY", "socks5h://172.18.80.1:16005")
+    monkeypatch.setenv("HTTPS_PROXY", "http://172.18.80.1:16005")
+    FakeClient.responses = [_completion({"primary_value": "建立人格"})]
+
+    result = _generator().route(RoutingInput("今天不知道发什么，帮我做条小红书。", _brand(), ()))
+
     assert result == "brand_life_narrative"
+    assert FakeClient.init_kwargs[0]["trust_env"] is False
+
+
+def test_provider_transport_failure_retries_then_returns_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses: list[FakeResponse | httpx.TransportError] = [
+        httpx.ConnectError("synthetic transport failure"),
+        _completion({"primary_value": "建立人格"}),
+    ]
+
+    class RetryClient(FakeClient):
+        def post(self, *_: object, **kwargs: object) -> FakeResponse:
+            self.requests.append(kwargs)
+            response = responses.pop(0)
+            if isinstance(response, httpx.TransportError):
+                raise response
+            return response
+
+    monkeypatch.setattr(httpx, "Client", RetryClient)
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.time.sleep", lambda _: None)
+
+    response, retries = _generator(transport_max_retries=2)._request("system", "prompt", 20)
+
+    assert response["choices"]
+    assert retries == 1
+    assert len(FakeClient.requests) == 2
+
+
+def test_provider_empty_5xx_retries_but_nonempty_5xx_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeClient.responses = [
+        FakeResponse(503, {}, content=b""),
+        _completion({"primary_value": "建立人格"}),
+    ]
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.time.sleep", lambda _: None)
+
+    _, retries = _generator(transport_max_retries=2)._request("system", "prompt", 20)
+
+    assert retries == 1
     assert len(FakeClient.requests) == 2
 
 

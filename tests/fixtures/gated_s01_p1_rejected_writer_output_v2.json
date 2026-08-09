@@ -1,0 +1,8 @@
+{
+  "card_id": "S01-P1",
+  "fixture_version": "gated-s01-p1-rejected-boundary-excerpt-v2",
+  "machine_boundary_excerpt": "已确认的身份和主色，至于面料、版型、耐穿度这些，资料里没有的，我不会替它打包。",
+  "prior_response_sha256": "1ea7e83c9c5241511ee3ea07a0b9684b90994d1d6022e8009082125a26af1d64",
+  "prior_runtime_candidate_sha": "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+  "founder_classification": "L2_soft_experience_allowed"
+}

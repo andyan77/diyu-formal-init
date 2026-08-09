@@ -1,0 +1,229 @@
+{
+  "byte_identical_batch_digest": true,
+  "byte_identical_object_fingerprint": true,
+  "prestate": {
+    "brand_id": "e8f69e16-acf3-57d3-adc6-4c25fe670649",
+    "legacy_accounts": 9,
+    "legacy_task_id": "406c72d0-3021-5f2d-8ce7-743986547261",
+    "legacy_version_id": "432cc50a-240e-5b4a-88e1-dcc37b6b38df",
+    "tenant_id": "3020d100-d206-5f02-aa49-8aefa442ce86"
+  },
+  "prestate_snapshot_sha256": "561e1a15fbdca2e6fee1831cc47684ab793037b5d6124d625e612383fc721a12",
+  "round_one": {
+    "batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
+    "counts": {
+      "account_roles": 30,
+      "accounts": 39,
+      "auth_grants": 33,
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
+      "import_audits": 1,
+      "legacy_tasks": 1,
+      "library_entries": 35,
+      "library_versions": 35,
+      "organizations": 7,
+      "product_versions": 4,
+      "products": 4,
+      "profiles": 10,
+      "projection_items": 34,
+      "projections": 1,
+      "qualifications": 30,
+      "roles": 10,
+      "series": 2,
+      "source_documents": 27,
+      "source_segments": 44,
+      "source_versions": 27,
+      "users": 9
+    },
+    "formal_readback": {
+      "authorization_amendment_id": "AMD-AUTH-20260809-01",
+      "authorization_supersede_chains": [
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "5058cd90-e05b-5800-b311-d17bd62b8bea",
+          "authorization_version": "v2",
+          "digest": "d0b99d2f07ac48e51eff3309be777b0b05cddc7a22f6c910000c163ddb194900",
+          "prior_authorization_id": "89b29389-0e77-518f-b9d3-959a4f60fb9d",
+          "prior_authorization_version": "v1",
+          "prior_digest": "247a8ae5db07cd34c410ebd18f1fda1c1bad4d94b9ff7ad2248db92c90fc5c1e"
+        },
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "9f4a5a50-f462-53d0-8689-1f4413de4eea",
+          "authorization_version": "v2",
+          "digest": "4060c76d3faeedd89ce919d31f00fe49633a59bc3458dce3b53d985a82941ae6",
+          "prior_authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
+          "prior_authorization_version": "v1",
+          "prior_digest": "6400927f6262a1e1cb0c7d5f9b6da7af5450e2105066495f52bd8731acd332b4"
+        }
+      ],
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
+      "business_authorization_versions": {
+        "PS-S02-05": [
+          "v1",
+          "v2"
+        ],
+        "PS-S04-03": [
+          "v1",
+          "v2"
+        ]
+      },
+      "current_repeatable_qualification_authorizations": 2,
+      "logical_root_accounts": 10,
+      "platform_targets": 40,
+      "preserved_single_use_business_versions": 2,
+      "projection_contract_version": "brand-publication-projection-v2",
+      "projection_items": 34,
+      "qualifications": 30,
+      "repeatable_business_authorizations": 2,
+      "synthetic_single_use_authorizations": 2
+    },
+    "inventory": {
+      "active_account_names": [
+        "笛语·出厂之前",
+        "笛语·把衣服讲清楚",
+        "笛语主理人·取舍笔记",
+        "笛语华东·江浙穿衣日历",
+        "笛语四川·巴适穿衣",
+        "笛语服饰",
+        "笛语杭州西湖店",
+        "笛语湖州吴兴店·街坊衣事",
+        "笛语西湖店·试衣间问答",
+        "阿野在笛语·成都金牛店"
+      ],
+      "active_accounts": 10,
+      "authorizations": 6,
+      "carrier_rows": 20,
+      "expired_rk_ec_08": 1,
+      "judgments": 4,
+      "legacy_hidden_accounts": 9,
+      "legacy_tasks_readable": 1,
+      "logical_roots": 10,
+      "matrix_content_accounts": 30,
+      "organizations": 6,
+      "platform_format_targets": 40,
+      "products": 4,
+      "projection_items": 34,
+      "qualifications": 30,
+      "regional_store_entries": 31,
+      "regional_store_projection_items": 28,
+      "repeatable_business_authorizations": 2,
+      "series": 2,
+      "source_documents": 27,
+      "synthetic_single_use_authorizations": 2
+    },
+    "object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98"
+  },
+  "round_two": {
+    "batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
+    "counts": {
+      "account_roles": 30,
+      "accounts": 39,
+      "auth_grants": 33,
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
+      "import_audits": 1,
+      "legacy_tasks": 1,
+      "library_entries": 35,
+      "library_versions": 35,
+      "organizations": 7,
+      "product_versions": 4,
+      "products": 4,
+      "profiles": 10,
+      "projection_items": 34,
+      "projections": 1,
+      "qualifications": 30,
+      "roles": 10,
+      "series": 2,
+      "source_documents": 27,
+      "source_segments": 44,
+      "source_versions": 27,
+      "users": 9
+    },
+    "formal_readback": {
+      "authorization_amendment_id": "AMD-AUTH-20260809-01",
+      "authorization_supersede_chains": [
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "5058cd90-e05b-5800-b311-d17bd62b8bea",
+          "authorization_version": "v2",
+          "digest": "d0b99d2f07ac48e51eff3309be777b0b05cddc7a22f6c910000c163ddb194900",
+          "prior_authorization_id": "89b29389-0e77-518f-b9d3-959a4f60fb9d",
+          "prior_authorization_version": "v1",
+          "prior_digest": "247a8ae5db07cd34c410ebd18f1fda1c1bad4d94b9ff7ad2248db92c90fc5c1e"
+        },
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "9f4a5a50-f462-53d0-8689-1f4413de4eea",
+          "authorization_version": "v2",
+          "digest": "4060c76d3faeedd89ce919d31f00fe49633a59bc3458dce3b53d985a82941ae6",
+          "prior_authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
+          "prior_authorization_version": "v1",
+          "prior_digest": "6400927f6262a1e1cb0c7d5f9b6da7af5450e2105066495f52bd8731acd332b4"
+        }
+      ],
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
+      "business_authorization_versions": {
+        "PS-S02-05": [
+          "v1",
+          "v2"
+        ],
+        "PS-S04-03": [
+          "v1",
+          "v2"
+        ]
+      },
+      "current_repeatable_qualification_authorizations": 2,
+      "logical_root_accounts": 10,
+      "platform_targets": 40,
+      "preserved_single_use_business_versions": 2,
+      "projection_contract_version": "brand-publication-projection-v2",
+      "projection_items": 34,
+      "qualifications": 30,
+      "repeatable_business_authorizations": 2,
+      "synthetic_single_use_authorizations": 2
+    },
+    "inventory": {
+      "active_account_names": [
+        "笛语·出厂之前",
+        "笛语·把衣服讲清楚",
+        "笛语主理人·取舍笔记",
+        "笛语华东·江浙穿衣日历",
+        "笛语四川·巴适穿衣",
+        "笛语服饰",
+        "笛语杭州西湖店",
+        "笛语湖州吴兴店·街坊衣事",
+        "笛语西湖店·试衣间问答",
+        "阿野在笛语·成都金牛店"
+      ],
+      "active_accounts": 10,
+      "authorizations": 6,
+      "carrier_rows": 20,
+      "expired_rk_ec_08": 1,
+      "judgments": 4,
+      "legacy_hidden_accounts": 9,
+      "legacy_tasks_readable": 1,
+      "logical_roots": 10,
+      "matrix_content_accounts": 30,
+      "organizations": 6,
+      "platform_format_targets": 40,
+      "products": 4,
+      "projection_items": 34,
+      "qualifications": 30,
+      "regional_store_entries": 31,
+      "regional_store_projection_items": 28,
+      "repeatable_business_authorizations": 2,
+      "series": 2,
+      "source_documents": 27,
+      "synthetic_single_use_authorizations": 2
+    },
+    "object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98"
+  },
+  "schema_revision": "20260818_45"
+}

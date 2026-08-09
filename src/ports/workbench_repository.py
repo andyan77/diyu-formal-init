@@ -153,6 +153,13 @@ class WorkbenchRepository(ABC):
         del scope, query
         return []
 
+    @abstractmethod
+    def preview_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]: ...
+
     def create_brand_publication_candidate(
         self,
         scope: TenantManagementScope,
@@ -168,6 +175,28 @@ class WorkbenchRepository(ABC):
     ) -> dict[str, object]:
         del scope, projection_id
         raise NotImplementedError
+
+    @abstractmethod
+    def create_brand_feedback_observation(
+        self,
+        scope: TenantManagementScope,
+        source_task_id: UUID,
+        source_version_id: UUID | None,
+        source_account_id: UUID,
+        observation_payload: dict[str, object],
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def brand_feedback_observations(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def brand_relevance_governance(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]: ...
 
     @abstractmethod
     def create_management_organization_material(

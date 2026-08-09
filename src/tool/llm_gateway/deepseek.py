@@ -92,8 +92,10 @@ from src.shared.factual_basis import (
     product_fact_literal_spans,
     product_fact_packet_document,
     product_fact_records,
+    product_fact_value_conflicts,
     registered_product_claims,
     select_product_fact_block_ids,
+    unconfirmed_product_specificity_spans,
 )
 from src.shared.intake_contract import parse_live_intake_role_projection
 from src.shared.media_program import (
@@ -202,14 +204,158 @@ def _account_profile_source_spans(contract: PublicationContractV3) -> tuple[str,
     )
 
 
+ProductFactProjection = tuple[dict[str, object], ...]
+
+
+def _confirmed_product_fact_projection(
+    packet: ProductFactPacket,
+    product_basis: ProductDecisionBasisV2 | None,
+) -> ProductFactProjection:
+    if product_basis is None:
+        return ()
+    supporting_refs = set(product_basis.supporting_fact_refs)
+    return tuple(
+        {
+            "fact_ref": item.fact_id,
+            "field": item.fact_key,
+            "value": item.structured_value,
+            "fact_version": item.fact_version,
+        }
+        for item in packet.facts
+        if item.fact_id in supporting_refs
+    )
+
+
+def _writer_grounding_context(
+    packet: ProductFactPacket,
+    product_basis: ProductDecisionBasisV2 | None,
+    contract: PublicationContractV3,
+) -> tuple[ProductFactProjection, tuple[str, ...]]:
+    quote_ids = tuple(ref for ref in contract.brand_context_use.consumed_refs if ref.startswith(("PS-S02-", "PS-S04-")))
+    return _confirmed_product_fact_projection(packet, product_basis), quote_ids
+
+
+def _writer_grounding_snapshot(
+    confirmed_product_facts: ProductFactProjection,
+    persona_quote_ids: tuple[str, ...],
+) -> dict[str, object]:
+    return {
+        "writer_confirmed_product_fact_refs": [str(item["fact_ref"]) for item in confirmed_product_facts],
+        "used_persona_quote_ids": sorted(persona_quote_ids),
+    }
+
+
+def _writer_explicit_control_instruction(request: WriterRequestV3) -> str:
+    if not request.explicit_user_controls:
+        return ""
+    return (
+        "explicit_user_controls 是用户本轮冻结的直接写作要求，优先于一般创作许可。必须逐项执行；"
+        "其中的禁止项即使被标成 creative_expression、假设、比喻或文学性承接，也不得通过补写"
+        "身份、对白、动作、原因或结果绕过。当前控制："
+        + json.dumps(request.explicit_user_controls, ensure_ascii=False)
+        + "。\n"
+    )
+
+
+def _writer_truth_and_persona_instruction(
+    request: WriterRequestV3,
+    confirmed_product_facts: ProductFactProjection,
+    persona_quote_ids: tuple[str, ...],
+) -> str:
+    assertion_layers = (
+        "商品表达采用 ADJ-WRITER-BOUNDARY-05 性能词极性收口。L1 硬断言只有冻结 V 级真值可以直说；"
+        "未确认的成分比例、价格、精确工艺、适穿年龄一律不写。未经确认的性能词只可用于"
+        "否定式或边界式说明，例如‘不是为 X 设计的’、‘如果你要 X，它不是答案’；这种品牌取舍"
+        "语言可以使用。不得把未确认性能写成肯定式商品声称，尤其禁止‘保证／100%／永不／绝不／"
+        "绝对’加性能词。"
+        "商品品质的超级断言也明文禁止，例如‘最舒适／业内第一／全网最好’；"
+        "但‘最好不要／最好先／第一眼’等日常建议或观察用法可以正常使用，"
+        "不能把这些歧义词当成商品真值。"
+        "L2 是不取得事实资格的软性体验表达，可以自然使用‘耐穿／百搭／好打理／显精神’等"
+        "泛质感词，但不得加上保证、承诺、"
+        "绝对或永不等措辞，不得写入 ProductFact。L3 判断只保持条件语态，主语留在用户侧。"
+        "账号声纹 lens 只调节表达分寸，不改变这三层权责。\n"
+    )
+    confirmed = ""
+    if confirmed_product_facts:
+        confirmed = (
+            "confirmed_product_facts 是服务端冻结且允许面向受众逐字使用的商品真值。可以自然说出"
+            "其中的商品名、品类、主色和其他已列字段；不得改值、换成未列值或据此补出 L1 具体信息"
+            "与保证。信息完整性要求：一旦写某个字段已经确认，"
+            "必须同时说出 confirmed_product_facts 中的实际值，不能只写‘主色已经确认’却隐去颜色。"
+            "当前真值：" + json.dumps(confirmed_product_facts, ensure_ascii=False, sort_keys=True) + "。\n"
+        )
+    judgment = ""
+    if request.product_decision_basis is not None:
+        judgment = (
+            "product_decision_basis 中的 applicability_conditions 只能保持用户侧条件语态：写成"
+            "‘如果你需要／如果你的条件是……’，不得倒置为‘它适合／它提供／它能带来……’等商品"
+            "能力或效果断言。\n"
+        )
+    persona = (
+        "账号画像只提供观察角度，不提供自传。账号人设的第一人称具体经历只能来自"
+        "服务端冻结的授权原句库选择；使用时保持原句事实边界，所选 PS-S02-/PS-S04- 原句 ID"
+        "会冻结进任务快照。当前任务获准使用的原句 ID："
+        + json.dumps(persona_quote_ids, ensure_ascii=False)
+        + "。没有获准原句时，不得写"
+        "‘我曾经／我在店里／我接待过’等已发生的账号经历，可以使用不绑定既成事件的一般观察"
+        "和条件建议。\n"
+    )
+    return assertion_layers + confirmed + judgment + persona
+
+
+def _writer_scope(request: WriterRequestV3) -> list[str]:
+    scope: list[str] = []
+    if (
+        request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+        and request.actuality_fact_refs
+        and request.content_product in {"brand_life_narrative", "local_response"}
+    ):
+        scope.append(
+            "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实。可以围绕它"
+            "自然引用、复述、调整语序，并新增说话者当下的主观感受、微小反应、比喻、文学性承接与"
+            "一般判断。"
+            + USER_ACTUALITY_DOMAIN_ELABORATION
+            + "。"
+            + USER_ACTUALITY_HARD_FACT_BOUNDARY
+            + "。品牌表达约束、创作方法和 prior_output 都不能扩大这条来源边界；自然解释也不能作为"
+            "用户陈述的外部证据或后续任务的可信来源。"
+        )
+    if request.product_decision_basis is not None:
+        scope.append(
+            "product_specific_understanding、tradeoff 和 condition_of_validity 穷尽本题商品语义；"
+            "只把这三项自然表达成一项选择，不解释这组关系会产生何种搭配、观感、使用或穿着结果，"
+            "也不介绍、对比或评价其他商品维度。"
+        )
+    return scope
+
+
 _LOGGER = logging.getLogger(__name__)
 _SPEAKER_ID = "speaker:brand_account"
 _CREATOR_ACTOR_ID = "actor:creator"
 _CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
 _ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 
+
+def _provider_error_identity(response: httpx.Response) -> tuple[str, str]:
+    error_code = ""
+    error_type = ""
+    try:
+        error_body = response.json()
+        if isinstance(error_body, dict):
+            raw_error = error_body.get("error")
+            if isinstance(raw_error, dict):
+                if isinstance(raw_error.get("code"), str):
+                    error_code = str(raw_error["code"])
+                if isinstance(raw_error.get("type"), str):
+                    error_type = str(raw_error["type"])
+    except (TypeError, ValueError):
+        pass
+    return error_code, error_type
+
 ProviderFailureKind = Literal[
     "transport_no_response",
+    "transport_empty_5xx",
     "http_unavailable_response",
     "http_rejection_response",
     "invalid_response",
@@ -233,6 +379,7 @@ class ProviderRequestFailure(GenerationFailed):
     ) -> None:
         classifications = {
             "transport_no_response": ("PROVIDER_TRANSPORT_FAILED", "transport", True),
+            "transport_empty_5xx": ("PROVIDER_TRANSPORT_FAILED", "transport", True),
             "http_unavailable_response": ("PROVIDER_UNAVAILABLE", "provider", True),
             "http_rejection_response": ("PROVIDER_REQUEST_REJECTED", "provider", False),
             "invalid_response": ("PROVIDER_INVALID_RESPONSE", "provider", True),
@@ -659,8 +806,14 @@ class DeepSeekGenerator(ContentGenerator):
         reviewer_provider: ReviewerProvider | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
+        transport_max_retries: int | None = None,
         status_tracker: ProviderStatusTracker | None = None,
     ) -> None:
+        if max_retries < 0:
+            raise ValueError("content max retries cannot be negative")
+        resolved_transport_retries = max_retries if transport_max_retries is None else transport_max_retries
+        if resolved_transport_retries not in {0, 1, 2}:
+            raise ValueError("transport max retries must be between zero and two")
         self._api_base_url = api_base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
@@ -668,8 +821,17 @@ class DeepSeekGenerator(ContentGenerator):
         self._reviewer_model = reviewer_provider.model_name if reviewer_provider is not None else None
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
+        self._transport_max_retries = resolved_transport_retries
         self._status_tracker = status_tracker
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
+
+    def _http_client(self, timeout_seconds: float | None = None) -> httpx.Client:
+        # The authorized provider endpoint must not inherit workstation proxy variables;
+        # doing so previously produced intermittent transport failures.
+        return httpx.Client(
+            timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds),
+            trust_env=False,
+        )
 
     @property
     def model_name(self) -> str:
@@ -890,41 +1052,26 @@ class DeepSeekGenerator(ContentGenerator):
             prior_output=request.prior_writer_output,
             revision_instruction=request.revision_instruction,
         )
-        writer_scope = []
-        if (
-            writer_request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
-            and writer_request.actuality_fact_refs
-            and writer_request.content_product
-            in {
-                "brand_life_narrative",
-                "local_response",
-            }
-        ):
-            writer_scope.append(
-                "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实。可以围绕它"
-                "自然引用、复述、调整语序，并新增说话者当下的主观感受、微小反应、比喻、文学性承接与"
-                "一般判断。"
-                + USER_ACTUALITY_DOMAIN_ELABORATION
-                + "。"
-                + USER_ACTUALITY_HARD_FACT_BOUNDARY
-                + "。品牌表达约束、创作方法和 prior_output 都不能扩大这条来源边界；自然解释也不能作为"
-                "用户陈述的外部证据或后续任务的可信来源。"
-            )
-        if writer_request.product_decision_basis is not None:
-            writer_scope.append(
-                "product_specific_understanding、tradeoff 和 condition_of_validity 穷尽本题商品语义；"
-                "只把这三项自然表达成一项选择，不解释这组关系会产生何种搭配、观感、使用或穿着结果，"
-                "也不介绍、对比或评价其他商品维度。"
-            )
+        confirmed_product_facts, persona_quote_ids = _writer_grounding_context(
+            context.product_fact_packet,
+            product_basis,
+            contract,
+        )
+        writer_scope = _writer_scope(writer_request)
         writer_payload, retries = self._request(
             (
-                "你是笛语 Writer。你只负责非事实创作表达，并且只返回一个 JSON。"
+                "你是笛语 Writer。你负责面向受众的自然创作表达；可以逐字使用服务端明确提供的"
+                "已确认商品真值，但不能改值、扩展为未确认事实或补写具体信息。只返回一个 JSON。"
                 "不要输出推理、内部合同、事实块、媒体指令或字段说明。\n"
                 "唯一负向安全合同：\n"
                 + negative_safety_contract_text()
                 + ("\n本题创作作用域：\n" + "\n".join(writer_scope) if writer_scope else "")
             ),
-            self._writer_request_v3_prompt(writer_request),
+            self._writer_request_v3_prompt(
+                writer_request,
+                confirmed_product_facts=confirmed_product_facts,
+                persona_quote_ids=persona_quote_ids,
+            ),
             4096,
         )
         try:
@@ -1028,6 +1175,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "writer_request_v3_digest": writer_request_digest(writer_request),
                 "writer_output_v3": writer_output_document(output),
                 "writer_output_v3_digest": output_digest,
+                **_writer_grounding_snapshot(confirmed_product_facts, persona_quote_ids),
                 "expression_plan_version": CREATIVE_KERNEL_V5_VERSION,
                 "expression_plan_digest": checked_kernel_digest,
                 "delivery_compiler_version": DELIVERY_COMPILER_V5_VERSION,
@@ -1061,17 +1209,20 @@ class DeepSeekGenerator(ContentGenerator):
         )
 
     @staticmethod
-    def _writer_request_v3_prompt(request: WriterRequestV3) -> str:
+    def _confirmed_product_fact_projection(
+        packet: ProductFactPacket,
+        product_basis: ProductDecisionBasisV2 | None,
+    ) -> tuple[dict[str, object], ...]:
+        return _confirmed_product_fact_projection(packet, product_basis)
+
+    @staticmethod
+    def _writer_request_v3_prompt(
+        request: WriterRequestV3,
+        *,
+        confirmed_product_facts: ProductFactProjection = (),
+        persona_quote_ids: tuple[str, ...] = (),
+    ) -> str:
         document = writer_request_document(request)
-        explicit_control_instruction = (
-            "explicit_user_controls 是用户本轮冻结的直接写作要求，优先于一般创作许可。必须逐项执行；"
-            "其中的禁止项即使被标成 creative_expression、假设、比喻或文学性承接，也不得通过补写"
-            "身份、对白、动作、原因或结果绕过。当前控制："
-            + json.dumps(request.explicit_user_controls, ensure_ascii=False)
-            + "。\n"
-            if request.explicit_user_controls
-            else ""
-        )
         actuality_source_check = (
             "返回 JSON 前，在本次同一 Writer 调用内逐句自检四个字段：如果一句话需要读者相信一个"
             "read_only_actuality_context 未提供的量化、检验、认证、具体商品或批次、工艺方法、性能、"
@@ -1110,13 +1261,17 @@ class DeepSeekGenerator(ContentGenerator):
             if request.revision_instruction is not None
             else ""
         )
+        truth_and_persona_instruction = _writer_truth_and_persona_instruction(
+            request, confirmed_product_facts, persona_quote_ids
+        )
         return (
             "请依据下面唯一业务合同完成一篇可直接修改和采用的内容。\n"
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
             + actuality_instruction
             + prior_output_instruction
             + revision_instruction
-            + explicit_control_instruction
+            + _writer_explicit_control_instruction(request)
+            + truth_and_persona_instruction
             + "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
             "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
@@ -1156,7 +1311,10 @@ class DeepSeekGenerator(ContentGenerator):
             else set()
         )
         if any(
-            fact_ref not in actuality_fact_refs and exact_text and exact_text in visible
+            fact_ref not in actuality_fact_refs
+            and fact_ref not in context.product_fact_packet.fact_ids
+            and exact_text
+            and exact_text in visible
             for fact_ref, exact_text in context.fact_text_by_id.items()
         ):
             raise GenerationFailed("Writer 不得复制或改写服务端事实块")
@@ -1169,8 +1327,10 @@ class DeepSeekGenerator(ContentGenerator):
             )
         ):
             raise GenerationFailed("Writer 不得照抄内部商品选择计划")
-        if product_fact_literal_spans(context.product_fact_packet, visible):
-            raise GenerationFailed("Writer 不得复述或改写服务端商品事实块")
+        if product_fact_value_conflicts(context.product_fact_packet, visible):
+            raise GenerationFailed("Writer 改写了已确认商品事实")
+        if unconfirmed_product_specificity_spans(visible):
+            raise GenerationFailed("Writer 新增了未确认商品具体信息")
 
     def _generate_kernel(
         self,
@@ -4758,7 +4918,7 @@ CreativePlanV2：{
             },
         }
         try:
-            with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+            with self._http_client(timeout_seconds) as client:
                 response = client.post(
                     self._strict_review_api_url(),
                     headers={"Authorization": f"Bearer {self._api_key}"},
@@ -4858,7 +5018,7 @@ CreativePlanV2：{
             },
         }
         try:
-            with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+            with self._http_client(timeout_seconds) as client:
                 response = client.post(
                     self._strict_review_api_url(),
                     headers={"Authorization": f"Bearer {self._api_key}"},
@@ -4929,7 +5089,7 @@ CreativePlanV2：{
         thinking_disabled: bool = True,
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
-        retries = 0
+        transport_retries = 0
         request_payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
@@ -4942,7 +5102,7 @@ CreativePlanV2：{
         }
         if thinking_disabled:
             request_payload["thinking"] = {"type": "disabled"}
-        with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+        with self._http_client(timeout_seconds) as client:
             while True:
                 try:
                     response = client.post(
@@ -4957,68 +5117,58 @@ CreativePlanV2：{
                                 "模型返回无效",
                                 kind="invalid_response",
                                 response_received=True,
-                                retry_count=retries,
+                                retry_count=transport_retries,
                             )
                         if self._status_tracker is not None:
                             self._status_tracker.record("available")
-                        return result, retries
-                    if response.status_code != 429 and not 500 <= response.status_code < 600:
-                        error_code = ""
-                        error_type = ""
-                        try:
-                            error_body = response.json()
-                            if isinstance(error_body, dict):
-                                raw_error = error_body.get("error")
-                                if isinstance(raw_error, dict):
-                                    raw_code = raw_error.get("code")
-                                    if isinstance(raw_code, str):
-                                        error_code = raw_code
-                                    raw_type = raw_error.get("type")
-                                    if isinstance(raw_type, str):
-                                        error_type = raw_type
-                        except (TypeError, ValueError):
-                            pass
-                        state = _provider_rejection_state(
-                            response.status_code,
-                            error_code,
-                            error_type,
-                        )
-                        _LOGGER.warning(
-                            "model request rejected: status=%s code=%s category=%s",
-                            response.status_code,
-                            error_code or "unspecified",
-                            error_type or "unspecified",
-                        )
-                        if self._status_tracker is not None and state is not None:
-                            self._status_tracker.record(state)
-                        raise ProviderRequestFailure(
-                            "模型服务拒绝当前请求",
-                            kind="http_rejection_response",
-                            response_received=True,
-                            retry_count=retries,
-                        )
-                    if retries >= self._max_retries:
-                        if self._status_tracker is not None:
-                            self._status_tracker.record("degraded" if response.status_code == 429 else "unavailable")
-                        raise ProviderRequestFailure(
-                            "模型服务暂时不可用",
-                            kind="http_unavailable_response",
-                            response_received=True,
-                            retry_count=retries,
-                        )
-                    delay = self._retry_delay(response.headers.get("Retry-After"), retries)
+                        return result, transport_retries
+                    if 500 <= response.status_code < 600 and not response.content:
+                        if transport_retries >= self._transport_max_retries:
+                            if self._status_tracker is not None:
+                                self._status_tracker.record("unavailable")
+                            raise ProviderRequestFailure(
+                                "模型服务返回空的暂时错误响应",
+                                kind="transport_empty_5xx",
+                                response_received=True,
+                                retry_count=transport_retries,
+                            )
+                        delay = self._retry_delay(response.headers.get("Retry-After"), transport_retries)
+                        transport_retries += 1
+                        time.sleep(delay)
+                        continue
+                    error_code, error_type = _provider_error_identity(response)
+                    state = _provider_rejection_state(
+                        response.status_code,
+                        error_code,
+                        error_type,
+                    )
+                    _LOGGER.warning(
+                        "model request rejected: status=%s code=%s category=%s",
+                        response.status_code,
+                        error_code or "unspecified",
+                        error_type or "unspecified",
+                    )
+                    if self._status_tracker is not None and state is not None:
+                        self._status_tracker.record(state)
+                    unavailable = response.status_code == 429 or 500 <= response.status_code < 600
+                    raise ProviderRequestFailure(
+                        "模型服务暂时不可用" if unavailable else "模型服务拒绝当前请求",
+                        kind="http_unavailable_response" if unavailable else "http_rejection_response",
+                        response_received=True,
+                        retry_count=transport_retries,
+                    )
                 except httpx.TransportError as exc:
-                    if retries >= self._max_retries:
+                    if transport_retries >= self._transport_max_retries:
                         if self._status_tracker is not None:
                             self._status_tracker.record("unavailable")
                         raise ProviderRequestFailure(
                             "模型网络请求失败",
                             kind="transport_no_response",
                             response_received=False,
-                            retry_count=retries,
+                            retry_count=transport_retries,
                         ) from exc
-                    delay = min(4.0, 0.5 * (2**retries))
-                retries += 1
+                    delay = min(4.0, 0.5 * (2**transport_retries))
+                transport_retries += 1
                 time.sleep(delay)
 
     @staticmethod

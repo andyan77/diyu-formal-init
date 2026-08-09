@@ -301,6 +301,10 @@ class ProductFact:
     applicability: str = "legacy_scope"
     product_id: UUID | None = None
     product_version_id: UUID | None = None
+    judgment_ref: str | None = None
+    judgment_version: str | None = None
+    judgment_digest: str | None = None
+    judgment_applicability_conditions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

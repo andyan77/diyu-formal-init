@@ -1,0 +1,891 @@
+{
+  "anomaly_results": [
+    {
+      "evidence": "legacy v1 digest stayed byte-identical; current CSPU-008 task used only frozen V/J refs",
+      "provider_requests": 0,
+      "result": "PASS"
+    },
+    {
+      "evidence": "formal ProductFact keeps only Gate A V fields; DEMO-QCX source absent from projection",
+      "provider_requests": 0,
+      "result": "PASS"
+    },
+    {
+      "evidence": "structured claim resolver returned needs_review before Writer",
+      "provider_requests": 0,
+      "result": "PASS"
+    },
+    {
+      "evidence": "RK-EC-08 absent from current R01 selection",
+      "provider_requests": 0,
+      "result": "PASS"
+    },
+    {
+      "evidence": "Hangzhou/Huzhou positive scope and sibling-store negative scope both held",
+      "provider_requests": 0,
+      "result": "PASS"
+    },
+    {
+      "evidence": "two actors, one S01 logical account, cross-user read rejected",
+      "provider_requests": 0,
+      "result": "PASS",
+      "task_ids": [
+        "f227c048-89f3-4c07-849f-c837b3180d52",
+        "d0422c07-20d6-4f97-b613-c76963d89a3a"
+      ]
+    },
+    {
+      "evidence": {
+        "authorization_fixtures": [
+          {
+            "authorization_id": "01ec9efb-7215-5973-8836-a31521fa654e",
+            "event_counts": {
+              "consumed": 1,
+              "released": 1,
+              "reserved": 2
+            },
+            "failed_run_released": true,
+            "fixture_scope": "DEMO-TEST",
+            "independent_task_rejected": true,
+            "occupies_persona_quote_library": false,
+            "same_lineage_v2_without_second_consumption": true,
+            "subject_ref": "DEMO-TEST-QUOTE-S02-01",
+            "v1_consumed_once": true
+          },
+          {
+            "authorization_id": "07fc129d-cf5c-5a4e-aa62-368fd23693b5",
+            "event_counts": {
+              "consumed": 1,
+              "released": 1,
+              "reserved": 2
+            },
+            "failed_run_released": true,
+            "fixture_scope": "DEMO-TEST",
+            "independent_task_rejected": true,
+            "occupies_persona_quote_library": false,
+            "same_lineage_v2_without_second_consumption": true,
+            "subject_ref": "DEMO-TEST-QUOTE-S04-01",
+            "v1_consumed_once": true
+          }
+        ],
+        "formal_persona_authorization_events": 0,
+        "verification_mode": "read_only_after_preflight"
+      },
+      "provider_requests": 0,
+      "result": "PASS"
+    },
+    {
+      "evidence": "legacy AMD v1 task and digest stayed unchanged; new task froze current projection v2",
+      "provider_requests": 0,
+      "result": "PASS"
+    }
+  ],
+  "artifact_index": [
+    {
+      "account_code": "H03",
+      "account_editorial_resolution_digest": "e12ce25afbf42650ecff675c6ebdb9e3a527ec6d3b732fa04421d69d498b441f",
+      "account_profile_id": "d08c3d65-9cd1-58b6-a473-bfd255a8ebf3",
+      "account_profile_version": 1,
+      "artifact_digest": "d2cd29ca299c5948b619b56d0c492f80a649f19495c4eeda573d2960177aa037",
+      "body_digest": "87b1366339f88134017b4c36224914a5f8a53a5ad44ff91555bf3defc76a12e0",
+      "brand_relevance_consumed_refs": [
+        "fact:product:ca1d0c3357ab1163",
+        "fact:product:d6b2bdf031064cb3",
+        "fact:product:5f229f11f4589bf9"
+      ],
+      "brand_relevance_family": "product_expertise",
+      "card_id": "S01-P1",
+      "content_product": "dressing_decision",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向明确商品兴趣者，解释优势、代价、适合与不适合，不包装不存在的设计原意。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：仅据商品结构与规划发声；禁止虚构库存销量、实际价格和QA/QC结论，严格保留V/P/C/R。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：总部商品企划位置，负责商品结构、组合、角色与生命周期，不冒充设计师或面料专家。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P2主场，每条至少覆盖问题、优势、牺牲和反选中的三项。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "d4b581c6-da52-5e5b-a933-4306c02ef57a",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "7255d967a4bbb76372d0c820171df604d206954fe6a0b9f7ec8dcaf51e89fc6d",
+      "product_value_contract_digest": "616958b5998c50d71d841f620992f44cf6ed223610886597af0423649d8bd1de",
+      "projection_claim_keys": [],
+      "publication_contract_digest": "cf098229f047ed0fac419738a50fefd1d23129c9e8f2c1692b76f08412fff182",
+      "publishing_identity_id": "d4b581c6-da52-5e5b-a933-4306c02ef57a",
+      "run_id": "70e80660-327d-4b31-95c2-a0890c177100",
+      "scenario_id": "SCENARIO-01",
+      "target": "douyin_video",
+      "task_id": "869ca664-bead-49a0-b6d2-7547f2361277",
+      "version": 1,
+      "version_id": "95a2cb78-fff6-41ff-9c37-30cbc2a634db"
+    },
+    {
+      "account_code": "H03",
+      "account_editorial_resolution_digest": "0b84292aa14d92623383d5b15e9b7ed0a24b298263e1fce9214f22331132b812",
+      "account_profile_id": "d08c3d65-9cd1-58b6-a473-bfd255a8ebf3",
+      "account_profile_version": 1,
+      "artifact_digest": "a2b0b23e30911d8c7066f13eab1fc77e66147d06ead6bfc168e91059c1212025",
+      "body_digest": "533629d19aced08dba5d97c82632834bdf73c069aa8de4f79717629cf9d6628d",
+      "brand_relevance_consumed_refs": [
+        "fact:product:ca1d0c3357ab1163",
+        "fact:product:d6b2bdf031064cb3",
+        "fact:product:5f229f11f4589bf9"
+      ],
+      "brand_relevance_family": "product_expertise",
+      "card_id": "S01-P2",
+      "content_product": "product_truth",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向明确商品兴趣者，解释优势、代价、适合与不适合，不包装不存在的设计原意。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：仅据商品结构与规划发声；禁止虚构库存销量、实际价格和QA/QC结论，严格保留V/P/C/R。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：总部商品企划位置，负责商品结构、组合、角色与生命周期，不冒充设计师或面料专家。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P2主场，每条至少覆盖问题、优势、牺牲和反选中的三项。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "d4b581c6-da52-5e5b-a933-4306c02ef57a",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "7255d967a4bbb76372d0c820171df604d206954fe6a0b9f7ec8dcaf51e89fc6d",
+      "product_value_contract_digest": "3c4cfaea6fcb3ecdf98daf5d2a1e81d96b15c196cee9feb4fb47291e5202ece8",
+      "projection_claim_keys": [],
+      "publication_contract_digest": "deecebcdc74c4e40d01eca19a0b1c26aa14476726022933fdddb4ea81a4443fd",
+      "publishing_identity_id": "ff2c9436-8159-5df3-ad8d-8a0d801b15cf",
+      "run_id": "f1efe78d-d909-49f4-ae6c-f20763f33271",
+      "scenario_id": "SCENARIO-01",
+      "target": "xiaohongshu_graphic",
+      "task_id": "6553ba77-de7d-4364-a5af-93d5413221e6",
+      "version": 1,
+      "version_id": "7b8edea0-c6d7-4dda-9d5a-77b74af1f22c"
+    },
+    {
+      "account_code": "H01",
+      "account_editorial_resolution_digest": "052c28bc9f54c55823546f0d746d2b3b30e22c0f78e90dfb6e5748ba046826c0",
+      "account_profile_id": "fe435a10-6f1c-5e84-ac4b-3a54f4856ae3",
+      "account_profile_version": 1,
+      "artifact_digest": "d73017e07cd9123973e9df542d3124c72c414891e8690b205c45422697ba9985",
+      "body_digest": "7d665419afd370ae65490c37d561a603b31c11aa169108364e941feb569830b6",
+      "brand_relevance_consumed_refs": [
+        "resource:bound-product-media:8b9da27c-1937-4681-9163-ad47f1d655f5:pv:2c4a6a8c-18e8-5247-8de1-ecb507bd8085:av:ae8049d1-bbcc-4e89-8327-83a8d15e4d4f",
+        "resource:bound-product-media:929ca371-06ad-4f51-b36a-80fe7ef9b97e:pv:6462c29e-1cf5-53a4-b6a9-19aa35ebd6ca:av:2ed38308-f74b-4654-b50b-23e76ceb87d7"
+      ],
+      "brand_relevance_family": "brand_visual",
+      "card_id": "S01-P5",
+      "content_product": "visual_styling_story",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：与长期关注者和平等观望者保持真诚、有立场且不迎合所有人的关系。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：仅使用品牌战略、正式品牌资料和总部确认文件，不讲私人经历、未确认商品或单店结论。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：总部品牌官方母号，代表笛语品牌而非个人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：负责品牌级为什么、系列选择、品牌拒绝和商品入季理由。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "fde6495170a32f5f5737afff3ae44cec2d22ac5e68bdccf4c4caaeb6b7bd8aba",
+      "product_value_contract_digest": "ec3aed66bcff79e143469c9f16f6fc9704a469638e3854e41b6b36d51252c0f4",
+      "projection_claim_keys": [],
+      "publication_contract_digest": "1ab5c0258b9f1707495924f84dbdc15a3f6c0fc821e79a177bc04ddf617a1da8",
+      "publishing_identity_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "run_id": "49a62e53-bda8-4637-b064-7e441362a148",
+      "scenario_id": "SCENARIO-01",
+      "target": "douyin_video",
+      "task_id": "c31057e0-8953-4c53-9a1b-eb1723b0abc3",
+      "version": 1,
+      "version_id": "d207304c-c502-496e-bf7a-874c96fccd32"
+    },
+    {
+      "account_code": "R01",
+      "account_editorial_resolution_digest": "0bb66247b3d1c2043a84fae666d88326425d97880f3ea96aa5c9f17ea6c344fa",
+      "account_profile_id": "857e1a56-facb-50d6-8921-3bc2470040a1",
+      "account_profile_version": 1,
+      "artifact_digest": "a3ac1b64fc5db74783b8fe62bd6213cc5cc82788f17c8f879dae5dc5934e035c",
+      "body_digest": "e4ed5abb651e5f5d83fc8e18297b9a07625def409fd064f56a211d18e4018576",
+      "brand_relevance_consumed_refs": [
+        "068079aa-7969-5c8a-ad68-87b2323467d1",
+        "brand_source_segment:74a4848e-e0d6-5178-8a64-594a8aa4ca97",
+        "825f82d7-2b69-5163-bf3d-77b2063d6a39"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S02-R01-P4",
+      "content_product": "local_response",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向华东家庭与门店周边家庭，作为懂本地的翻译者而非第二总部。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只叠加本区域气候、商圈、节庆和经营事实，不改品牌定位、不冒充总部、不跨区域。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：华东区域翻译和组织者，把总部定义转为本地可用语境。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4/P3偏重，承担区域主题、门店协同、本地场景与总部内容转译。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "4abc300b-8a7f-5227-aac3-0c8bb299a52d",
+      "performance_term_review_annotations": [
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S02-R01-P4",
+          "matched_term": "透气",
+          "sentence": "如果只是短时间外出，可以选一件方便穿脱的外套，里面搭一件透气的基础款，热了脱、凉了穿，灵活应对。"
+        },
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S02-R01-P4",
+          "matched_term": "透气",
+          "sentence": "；镜头位置 2 的字幕与文字层承载原句：如果只是短时间外出，可以选一件方便穿脱的外套，里面搭一件透气的基础款，热了脱、凉了穿，灵活应对。"
+        }
+      ],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07"
+      ],
+      "publication_contract_digest": "ec9dadeead000a24f8aa81ff057ce54e4fe16354d9076fe475eda1764302aa0f",
+      "publishing_identity_id": "5e691a46-b813-580f-8cb5-3ecc3dedac21",
+      "run_id": "39444be9-f38f-4069-a593-3222241129ca",
+      "scenario_id": "SCENARIO-02",
+      "target": "wechat_channels_video",
+      "task_id": "8f313c5c-5e89-4a16-a5fe-8046155295bd",
+      "version": 1,
+      "version_id": "bf65be2d-ed25-42ee-95ae-442107fb2843"
+    },
+    {
+      "account_code": "S01",
+      "account_editorial_resolution_digest": "6e615161b54198a4799a4ac8c88027fd1b17ef9c06f8c9ba8048fadcbfa9801a",
+      "account_profile_id": "a05f28d5-8628-544e-878a-0e22504a75c7",
+      "account_profile_version": 1,
+      "artifact_digest": "450df01d79191a8160eb4a62db90941ffe25a37249e2cd991cf40ac392732727",
+      "body_digest": "d9efb94fac968b87447f9a94ad0a19b7c489fe85c53601042b242bd8a2e199b6",
+      "brand_relevance_consumed_refs": [
+        "068079aa-7969-5c8a-ad68-87b2323467d1",
+        "brand_source_segment:74a4848e-e0d6-5178-8a64-594a8aa4ca97",
+        "825f82d7-2b69-5163-bf3d-77b2063d6a39"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S03-S01-P4",
+      "content_product": "local_response",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向门店周边家庭，提供具体及时可信信息但不替顾客下结论。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只用本店、本商圈、本地天气与本店商品服务事实；不代表总部、不跨店、不编库存成交。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：杭州西湖加盟门店的证明与服务位置，只讲本店发生的事。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4主场，覆盖到店问题、试穿观察、店内搭配、本店日常与本地活动。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "publication_contract_digest": "b35d17cadfe169249fb2ca20d417f6b2a657979d4e7dff7bca88e7d1d2ed4b41",
+      "publishing_identity_id": "694e7dae-bacc-58ed-893d-fd250f3d0e43",
+      "run_id": "c5b30078-86e7-4a56-a81b-9c66923f1021",
+      "scenario_id": "SCENARIO-03",
+      "target": "xiaohongshu_graphic",
+      "task_id": "39e16154-7e4c-4c33-9860-b56ddbd58cd3",
+      "version": 1,
+      "version_id": "5afa32bf-3940-494f-8625-cd16f9f91787"
+    },
+    {
+      "account_code": "S04",
+      "account_editorial_resolution_digest": "ca0e927c5158034b733529fe762975fefedcb0738cfc62f25fa77a908ecee65b",
+      "account_profile_id": "30d44ca5-023a-504e-8081-039b9d565a66",
+      "account_profile_version": 1,
+      "artifact_digest": "a34d1c48f9f56e5dba27b9f8092ca713f06328498a4ce9d1c02ade37662ef831",
+      "body_digest": "27ebd57ee396b4152b5c32e4d45030403ac97d8178e7ac1666d7c01964d78c66",
+      "brand_relevance_consumed_refs": [
+        "fact:product:35761e9fd8573f1d",
+        "fact:product:3decb89e5355c2d8",
+        "fact:product:3d077c46830af5d5"
+      ],
+      "brand_relevance_family": "product_expertise",
+      "card_id": "S04-S04-P2",
+      "content_product": "product_truth",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向愿意看真实成长过程的本地家庭，人设真实性是硬边界。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只讲自己经手的本店事实，不代表门店经营结论、不冒充专业资格。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：成都金牛门店成长型员工的演示角色位置；阿野为虚构名且未绑定真人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4为主、P1次之，讲学习过程、接待、纠错与协作。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "performance_term_review_annotations": [
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S04-S04-P2",
+          "matched_term": "显瘦",
+          "sentence": "内容看点：选一件开衫，第一步不是看它多显瘦，而是先确认：它是不是你要的那件，颜色是不是你心里那个灰。"
+        },
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S04-S04-P2",
+          "matched_term": "耐穿",
+          "sentence": "至于它穿起来多松弛、多耐穿、多好打理，那些都还没被证实，不能当成事实来讲。"
+        },
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S04-S04-P2",
+          "matched_term": "好打理",
+          "sentence": "至于它穿起来多松弛、多耐穿、多好打理，那些都还没被证实，不能当成事实来讲。"
+        },
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S04-S04-P2",
+          "matched_term": "耐磨",
+          "sentence": "所以，如果你需要的是室内外切换时随手搭一件的层次，它可能是个值得看的选项；但如果你要的是高强度户外活动时的耐磨外套，那它不是答案。"
+        },
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S04-S04-P2",
+          "matched_term": "耐磨",
+          "sentence": "；镜头位置 4 的字幕与文字层承载原句：所以，如果你需要的是室内外切换时随手搭一件的层次，它可能是个值得看的选项；但如果你要的是高强度户外活动时的耐磨外套，那它不是答案。"
+        }
+      ],
+      "product_fact_packet_digest": "e8aef143ad4fa1382fdaefc4ce6f9cf11cc7c6d7f82db21873002a9a4b672a64",
+      "product_value_contract_digest": "e51f0faf11b2b5c01b95fb3a6e25483d332e97f442e50c58541ecad58095da8e",
+      "projection_claim_keys": [],
+      "publication_contract_digest": "8cd5a63cf869f9682ce835af24432bf0304b55da2e6832dc93b90c04dbfa12a4",
+      "publishing_identity_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "run_id": "752c9419-3ebd-4358-84ac-c419cdb6cc5b",
+      "scenario_id": "SCENARIO-04",
+      "target": "douyin_video",
+      "task_id": "7d80de4f-4c34-4905-ba15-9c6c1ad3c054",
+      "version": 1,
+      "version_id": "c95fb017-6827-4096-ad7e-7295c7719271"
+    },
+    {
+      "account_code": "H01",
+      "account_editorial_resolution_digest": "be24c0b4051ff79fbe389e207466a46ff7db4cbeaedf2fcd44a9edec4064f33c",
+      "account_profile_id": "fe435a10-6f1c-5e84-ac4b-3a54f4856ae3",
+      "account_profile_version": 1,
+      "artifact_digest": "8451550306affcda2a38ea9041c080b8aa8bcf31c670506424504278c09d40ff",
+      "body_digest": "b8ca090ae29de19549b7ae6c0eb2834290297a45ca0e2199e02d8ea48f9bd67d",
+      "brand_relevance_consumed_refs": [
+        "fact:product:35761e9fd8573f1d",
+        "fact:product:3decb89e5355c2d8",
+        "fact:product:3d077c46830af5d5"
+      ],
+      "brand_relevance_family": "product_expertise",
+      "card_id": "S05-H01-P1",
+      "content_product": "dressing_decision",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：与长期关注者和平等观望者保持真诚、有立场且不迎合所有人的关系。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：仅使用品牌战略、正式品牌资料和总部确认文件，不讲私人经历、未确认商品或单店结论。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：总部品牌官方母号，代表笛语品牌而非个人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：负责品牌级为什么、系列选择、品牌拒绝和商品入季理由。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "performance_term_review_annotations": [
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S05-H01-P1",
+          "matched_term": "百搭",
+          "sentence": "它的灰色主色低调百搭，针织材质适合家庭常规挂放和清洗。"
+        }
+      ],
+      "product_fact_packet_digest": "e8aef143ad4fa1382fdaefc4ce6f9cf11cc7c6d7f82db21873002a9a4b672a64",
+      "product_value_contract_digest": "fb3398865e0d5c2e1b7a66a41c1c4d085b783b6f24a1f6b87d9e5481e88b0661",
+      "projection_claim_keys": [],
+      "publication_contract_digest": "a7be4fe2333a7ac44dab244f2fbeb054d857e9adbcbc2a6b97d4828f438c6c04",
+      "publishing_identity_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "run_id": "db35492d-d93d-4fe1-a488-4f63cd7cd125",
+      "scenario_id": "SCENARIO-05",
+      "target": "douyin_video",
+      "task_id": "7ce40be6-d32e-4cab-af1e-fd635d3625d9",
+      "version": 1,
+      "version_id": "df0ee33c-3076-4639-b28f-b6b7d736b6c2"
+    },
+    {
+      "account_code": "R01",
+      "account_editorial_resolution_digest": "82dc5a868a6d4855fd6534ee88f481fc089ca4f58ba4dd737614506ac73f084e",
+      "account_profile_id": "857e1a56-facb-50d6-8921-3bc2470040a1",
+      "account_profile_version": 1,
+      "artifact_digest": "86c1ce68042723e8695be80eef857ad57fad658c6bc135afe5fffd5205175a34",
+      "body_digest": "5e77238af735b2de24ab64218a58b07193877fb61f6b3a5ca7fbae28deaa553c",
+      "brand_relevance_consumed_refs": [
+        "068079aa-7969-5c8a-ad68-87b2323467d1",
+        "brand_source_segment:74a4848e-e0d6-5178-8a64-594a8aa4ca97",
+        "825f82d7-2b69-5163-bf3d-77b2063d6a39"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S05-R01-P1",
+      "content_product": "dressing_decision",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向华东家庭与门店周边家庭，作为懂本地的翻译者而非第二总部。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只叠加本区域气候、商圈、节庆和经营事实，不改品牌定位、不冒充总部、不跨区域。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：华东区域翻译和组织者，把总部定义转为本地可用语境。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4/P3偏重，承担区域主题、门店协同、本地场景与总部内容转译。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "4abc300b-8a7f-5227-aac3-0c8bb299a52d",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "e8aef143ad4fa1382fdaefc4ce6f9cf11cc7c6d7f82db21873002a9a4b672a64",
+      "product_value_contract_digest": "fb3398865e0d5c2e1b7a66a41c1c4d085b783b6f24a1f6b87d9e5481e88b0661",
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07"
+      ],
+      "publication_contract_digest": "4aca0afa6923aa343e8546ce0866dfc7dcd07dd6e200f11cdb0defbb203f0833",
+      "publishing_identity_id": "4abc300b-8a7f-5227-aac3-0c8bb299a52d",
+      "run_id": "e0e60eea-3b4b-4f57-8e0d-3add8da81487",
+      "scenario_id": "SCENARIO-05",
+      "target": "douyin_video",
+      "task_id": "583a4612-7c58-4602-acfe-3406b7832386",
+      "version": 1,
+      "version_id": "9eaada8e-3e86-4efe-bd51-4a50339df08b"
+    },
+    {
+      "account_code": "S01",
+      "account_editorial_resolution_digest": "14621f0424766c8ec21b0798a1fd5959f19e7bbfb76ed1472108b80f667bd987",
+      "account_profile_id": "a05f28d5-8628-544e-878a-0e22504a75c7",
+      "account_profile_version": 1,
+      "artifact_digest": "4f4af40b2f67b1dafc13970da4aebf07414fb77d4f92c96d6764422ea3472c09",
+      "body_digest": "6975b401b7d28b8d144abb1b1d757464febb6ba294488535e0ee84256d5096d4",
+      "brand_relevance_consumed_refs": [
+        "068079aa-7969-5c8a-ad68-87b2323467d1",
+        "brand_source_segment:74a4848e-e0d6-5178-8a64-594a8aa4ca97",
+        "825f82d7-2b69-5163-bf3d-77b2063d6a39"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S05-S01-P1",
+      "content_product": "dressing_decision",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向门店周边家庭，提供具体及时可信信息但不替顾客下结论。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只用本店、本商圈、本地天气与本店商品服务事实；不代表总部、不跨店、不编库存成交。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：杭州西湖加盟门店的证明与服务位置，只讲本店发生的事。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4主场，覆盖到店问题、试穿观察、店内搭配、本店日常与本地活动。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "e8aef143ad4fa1382fdaefc4ce6f9cf11cc7c6d7f82db21873002a9a4b672a64",
+      "product_value_contract_digest": "fb3398865e0d5c2e1b7a66a41c1c4d085b783b6f24a1f6b87d9e5481e88b0661",
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "publication_contract_digest": "468b9a21ed1d559b6a6c58b23b1eaea3eb2f0ddf126b65f115f9e17b16ec64ec",
+      "publishing_identity_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "run_id": "640244c5-6e26-462f-9133-836bb1242ab7",
+      "scenario_id": "SCENARIO-05",
+      "target": "douyin_video",
+      "task_id": "681c0a85-f860-4cbd-8179-7dc6bbe2f62b",
+      "version": 1,
+      "version_id": "8e0bc7c5-a576-4145-b1db-d8b2ba96c234"
+    },
+    {
+      "account_code": "S04",
+      "account_editorial_resolution_digest": "2f383c09a21f6c3f99421c629f60c0981aa2ffd716ef9e6e288321e3b66f738b",
+      "account_profile_id": "30d44ca5-023a-504e-8081-039b9d565a66",
+      "account_profile_version": 1,
+      "artifact_digest": "e8ad1c881e535766631fa32f132345fabff8de99bb58eb088f455d7fafb8f503",
+      "body_digest": "cd8765cf25da79e91466b8cca0f5c1c5d4a75f25bc533298b761ce02d6b2844d",
+      "brand_relevance_consumed_refs": [
+        "14d398ec-4246-5aea-87f5-ea8cb7ad5b15",
+        "brand_source_segment:66d5d3a6-fbf3-5a89-be42-08abbdbc05b8",
+        "e6071dab-7ca9-5f72-9702-333068c19558"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S05-S04-P1",
+      "content_product": "dressing_decision",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向愿意看真实成长过程的本地家庭，人设真实性是硬边界。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只讲自己经手的本店事实，不代表门店经营结论、不冒充专业资格。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：成都金牛门店成长型员工的演示角色位置；阿野为虚构名且未绑定真人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4为主、P1次之，讲学习过程、接待、纠错与协作。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "e8aef143ad4fa1382fdaefc4ce6f9cf11cc7c6d7f82db21873002a9a4b672a64",
+      "product_value_contract_digest": "fb3398865e0d5c2e1b7a66a41c1c4d085b783b6f24a1f6b87d9e5481e88b0661",
+      "projection_claim_keys": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06",
+        "SK-CD-01",
+        "SK-CD-04"
+      ],
+      "publication_contract_digest": "dd3b259567b9e7ae5107d2e17712bd55ca22a78d0193538a5233777a999be999",
+      "publishing_identity_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "run_id": "c0a682cf-4ebd-4025-b7ab-6f47688e474a",
+      "scenario_id": "SCENARIO-05",
+      "target": "douyin_video",
+      "task_id": "a8a36a13-ae1e-45db-8341-ba70b068e8fa",
+      "version": 1,
+      "version_id": "c0bad4db-d317-4680-91af-99bc03f1cad3"
+    },
+    {
+      "account_code": "H01",
+      "account_editorial_resolution_digest": "4d477924571e42dd3bf1a5671896d4199774be7f0c1d2d8c51bfe6321a55da62",
+      "account_profile_id": "fe435a10-6f1c-5e84-ac4b-3a54f4856ae3",
+      "account_profile_version": 1,
+      "artifact_digest": "768a8cc91750d7032b1a63eaf7783f99dcf8174253db026366aa571ba843792a",
+      "body_digest": "dde57c6d7db74fc6268660be4fb23ccf94d3fba9503d25424bd8bbc35153be02",
+      "brand_relevance_consumed_refs": [
+        "account-profile:fe435a10-6f1c-5e84-ac4b-3a54f4856ae3:v1",
+        "publication-projection:ac0151ec-f0e6-5340-b9be-5b9263a0159b:v2"
+      ],
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "S06-H01-P3",
+      "content_product": "brand_life_narrative",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：与长期关注者和平等观望者保持真诚、有立场且不迎合所有人的关系。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：仅使用品牌战略、正式品牌资料和总部确认文件，不讲私人经历、未确认商品或单店结论。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：总部品牌官方母号，代表笛语品牌而非个人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：负责品牌级为什么、系列选择、品牌拒绝和商品入季理由。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [],
+      "publication_contract_digest": "db3a69c8eb36c47f215a23020bfc29c2ee05052f7d41c9463f57be50b1384ca9",
+      "publishing_identity_id": "3f1896c3-86cb-5925-b6ce-3580cf4e200d",
+      "run_id": "cce3d1c1-273d-4139-9c5e-9bc80d748810",
+      "scenario_id": "SCENARIO-06",
+      "target": "xiaohongshu_graphic",
+      "task_id": "f83cdc6f-9518-4d6f-9be1-dd6c786437f8",
+      "version": 1,
+      "version_id": "f90392f3-70dd-4678-af33-0e2850dbdce6"
+    },
+    {
+      "account_code": "S02",
+      "account_editorial_resolution_digest": "564548ab0328ec31944605b8a89d18619b3b1b569fb981765f81ecf0c11faf0f",
+      "account_profile_id": "3bdcb20f-0570-576d-9a2a-806f198c36be",
+      "account_profile_version": 1,
+      "artifact_digest": "7f154b7e29af9ebf08b4a5ef9d69d7ea727d53b60d589d2a3de39bc71265a877",
+      "body_digest": "d40070cf60ab17879bad690e14f015e436b86edd89d23410889eb6e9699d91cf",
+      "brand_relevance_consumed_refs": [
+        "068079aa-7969-5c8a-ad68-87b2323467d1",
+        "brand_source_segment:74a4848e-e0d6-5178-8a64-594a8aa4ca97",
+        "825f82d7-2b69-5163-bf3d-77b2063d6a39"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S06-S02-P3",
+      "content_product": "brand_life_narrative",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：以具体、清楚、能讲优缺点和条件判断的方式服务，不制造育儿焦虑。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只用商品、服务、本地场景与本店资料；不虚构资格、研发原意或绝对推荐。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：杭州店试衣间外的搭配服务位置，采用CR-10主角色加CR-09辅助角色。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P1/P4双主场，回答真实穿衣、搭配、天气与到店问题。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "503be51d-3797-5626-a3ab-0fe6e14a836e",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "publication_contract_digest": "ad69881506bb2faea03b52dc42ee0a4c7381f6f6f03c912a3aa105cfb4258154",
+      "publishing_identity_id": "799ea1a6-83a1-50e6-960b-9b5b26715fa9",
+      "run_id": "75db06a4-7f55-4b2e-aa6c-137eab94f788",
+      "scenario_id": "SCENARIO-06",
+      "target": "xiaohongshu_graphic",
+      "task_id": "95116180-64d9-4fab-802e-fac131db4270",
+      "version": 1,
+      "version_id": "0813d4df-3f90-442d-b011-2f75bdc84a45"
+    },
+    {
+      "account_code": "S04",
+      "account_editorial_resolution_digest": "f3806366c355b6f04946cdf41fb311296240370c38cfc58cefb9b0bef95bbdc6",
+      "account_profile_id": "30d44ca5-023a-504e-8081-039b9d565a66",
+      "account_profile_version": 1,
+      "artifact_digest": "f0e87841839760a6801231a4f6bd88d38fd40f20e3d16228794a9cb3cdcd4774",
+      "body_digest": "654994b0bb95d1a9077aaedb0479934324c881fd2a8cdc0e1c815b8398224fdf",
+      "brand_relevance_consumed_refs": [
+        "14d398ec-4246-5aea-87f5-ea8cb7ad5b15",
+        "brand_source_segment:66d5d3a6-fbf3-5a89-be42-08abbdbc05b8",
+        "e6071dab-7ca9-5f72-9702-333068c19558"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S06-S04-P3",
+      "content_product": "brand_life_narrative",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向愿意看真实成长过程的本地家庭，人设真实性是硬边界。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只讲自己经手的本店事实，不代表门店经营结论、不冒充专业资格。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：成都金牛门店成长型员工的演示角色位置；阿野为虚构名且未绑定真人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4为主、P1次之，讲学习过程、接待、纠错与协作。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06",
+        "SK-CD-01",
+        "SK-CD-04"
+      ],
+      "publication_contract_digest": "4cf0e964159be771cf2d8980a32fb7281b21cc7a9242d90369d6459b9dde89bd",
+      "publishing_identity_id": "28dba4cd-378b-5073-b96b-25ea082a578d",
+      "run_id": "046d9d0f-0752-4c08-9fa5-daaaac3c4081",
+      "scenario_id": "SCENARIO-06",
+      "target": "xiaohongshu_graphic",
+      "task_id": "ae2018b2-3030-4576-ac24-fb6ac4571e13",
+      "version": 1,
+      "version_id": "3ce6dc34-4bf8-4c86-b56b-81b4ef214372"
+    },
+    {
+      "account_code": "H01",
+      "account_editorial_resolution_digest": "4d477924571e42dd3bf1a5671896d4199774be7f0c1d2d8c51bfe6321a55da62",
+      "account_profile_id": "fe435a10-6f1c-5e84-ac4b-3a54f4856ae3",
+      "account_profile_version": 1,
+      "artifact_digest": "2377da3ceb6bd9e75b0286ec19998ec809f1de48e3fc105482dd086ee66ebd8e",
+      "body_digest": "07b06f6897a72c0ef5195ac0ef70a610b12e00a9a409c413c9c2c983be0920fd",
+      "brand_relevance_consumed_refs": [
+        "account-profile:fe435a10-6f1c-5e84-ac4b-3a54f4856ae3:v1",
+        "publication-projection:ac0151ec-f0e6-5340-b9be-5b9263a0159b:v2"
+      ],
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "S07-H01-P3",
+      "content_product": "brand_life_narrative",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：与长期关注者和平等观望者保持真诚、有立场且不迎合所有人的关系。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：仅使用品牌战略、正式品牌资料和总部确认文件，不讲私人经历、未确认商品或单店结论。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：总部品牌官方母号，代表笛语品牌而非个人。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：负责品牌级为什么、系列选择、品牌拒绝和商品入季理由。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "performance_term_review_annotations": [],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [],
+      "publication_contract_digest": "0b9987d2b665e20ee09ea1f6cd793e88151fd0348a3e75d990707f4297d99986",
+      "publishing_identity_id": "1f090abc-6dde-5c2b-9501-56bbf63c5fa2",
+      "run_id": "f86f2727-f785-43a1-8624-3b51ab1c5e0a",
+      "scenario_id": "SCENARIO-07",
+      "target": "wechat_channels_video",
+      "task_id": "e49cab2b-3201-4beb-9295-a048885acd71",
+      "version": 1,
+      "version_id": "49345fa5-d55d-4bb4-a70d-245c5fd50bce"
+    },
+    {
+      "account_code": "S01",
+      "account_editorial_resolution_digest": "6e615161b54198a4799a4ac8c88027fd1b17ef9c06f8c9ba8048fadcbfa9801a",
+      "account_profile_id": "a05f28d5-8628-544e-878a-0e22504a75c7",
+      "account_profile_version": 1,
+      "artifact_digest": "75365e235f4a30fcaf809491a94c5f7d135032b9539dd35d7421dd764a0d3e54",
+      "body_digest": "2407d9d21a1db4eb8bb51e173544b8555291b1aef7fb1a761570fbf823e1a7b1",
+      "brand_relevance_consumed_refs": [
+        "068079aa-7969-5c8a-ad68-87b2323467d1",
+        "brand_source_segment:74a4848e-e0d6-5178-8a64-594a8aa4ca97",
+        "825f82d7-2b69-5163-bf3d-77b2063d6a39"
+      ],
+      "brand_relevance_family": "local_trust",
+      "card_id": "S08-S01-P4",
+      "content_product": "local_response",
+      "lens_dimensions": {
+        "audience_relation": "回应姿态遵守冻结受众关系：面向门店周边家庭，提供具体及时可信信息但不替顾客下结论。；不得据此补写受众身份或经历。",
+        "closure_method": "收束不得越过冻结权威边界：只用本店、本商圈、本地天气与本店商品服务事实；不代表总部、不跨店、不编库存成交。；只回到本题可观察的选择。",
+        "judgment_order": "先履行冻结身份定位所承担的判断职责：杭州西湖加盟门店的证明与服务位置，只讲本店发生的事。；再完成当前产品中心任务。",
+        "observation_angle": "观察入口受冻结内容领地约束：P4主场，覆盖到店问题、试穿观察、店内搭配、本店日常与本地活动。；它只改变先看什么，不替换本题。"
+      },
+      "logical_account_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "performance_term_review_annotations": [
+        {
+          "annotation_kind": "bare_performance_term_review",
+          "blocking": false,
+          "card_id": "S08-S01-P4",
+          "matched_term": "百搭",
+          "sentence": "是给孩子找件换季的衣服，还是给自己添件百搭款？"
+        }
+      ],
+      "product_fact_packet_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "product_value_contract_digest": null,
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "publication_contract_digest": "6a76de7309dad4a83dd061d52c3a56bd7664c3e630419cd833bcabeb30ab64f0",
+      "publishing_identity_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "run_id": "2812b4f8-dba3-4c3c-93a9-09528186d481",
+      "scenario_id": "SCENARIO-08",
+      "target": "douyin_video",
+      "task_id": "a7108561-f472-4650-bea7-d6aa38e8aaa4",
+      "version": 1,
+      "version_id": "b2e778be-46d9-433e-834a-83ab41e19522"
+    }
+  ],
+  "content_max_retries": 0,
+  "cumulative_provider_request_count": 59,
+  "formal_binary_completion": true,
+  "max_retries": 0,
+  "model": "deepseek-v4-flash",
+  "performance_term_review_annotations": [
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S02-R01-P4",
+      "matched_term": "透气",
+      "sentence": "如果只是短时间外出，可以选一件方便穿脱的外套，里面搭一件透气的基础款，热了脱、凉了穿，灵活应对。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S02-R01-P4",
+      "matched_term": "透气",
+      "sentence": "；镜头位置 2 的字幕与文字层承载原句：如果只是短时间外出，可以选一件方便穿脱的外套，里面搭一件透气的基础款，热了脱、凉了穿，灵活应对。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S04-S04-P2",
+      "matched_term": "显瘦",
+      "sentence": "内容看点：选一件开衫，第一步不是看它多显瘦，而是先确认：它是不是你要的那件，颜色是不是你心里那个灰。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S04-S04-P2",
+      "matched_term": "耐穿",
+      "sentence": "至于它穿起来多松弛、多耐穿、多好打理，那些都还没被证实，不能当成事实来讲。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S04-S04-P2",
+      "matched_term": "好打理",
+      "sentence": "至于它穿起来多松弛、多耐穿、多好打理，那些都还没被证实，不能当成事实来讲。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S04-S04-P2",
+      "matched_term": "耐磨",
+      "sentence": "所以，如果你需要的是室内外切换时随手搭一件的层次，它可能是个值得看的选项；但如果你要的是高强度户外活动时的耐磨外套，那它不是答案。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S04-S04-P2",
+      "matched_term": "耐磨",
+      "sentence": "；镜头位置 4 的字幕与文字层承载原句：所以，如果你需要的是室内外切换时随手搭一件的层次，它可能是个值得看的选项；但如果你要的是高强度户外活动时的耐磨外套，那它不是答案。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S05-H01-P1",
+      "matched_term": "百搭",
+      "sentence": "它的灰色主色低调百搭，针织材质适合家庭常规挂放和清洗。"
+    },
+    {
+      "annotation_kind": "bare_performance_term_review",
+      "blocking": false,
+      "card_id": "S08-S01-P4",
+      "matched_term": "百搭",
+      "sentence": "是给孩子找件换季的衣服，还是给自己添件百搭款？"
+    }
+  ],
+  "prior_provider_request_count": 44,
+  "private_evidence_path": "~/diyu-evidence-brand-matrix-gated-81289d8619ef831d9d6a79acceaac9090f17ee3a",
+  "private_sha256s_digest": "ff48efd189febc065bfcd29496b1bae69952ed0002a38d5b71b272b09873d2bc",
+  "provider_handshake": {
+    "completion_requests": 0,
+    "host": "api.deepseek.com",
+    "port": 443,
+    "probe_version": "gate-d-provider-tcp-tls-v1",
+    "provider_budget_consumed": 0,
+    "status": "PASS",
+    "tls": true,
+    "tls_version": "TLSv1.3"
+  },
+  "provider_request_budget": 80,
+  "provider_request_count": 15,
+  "provider_transport_retries": 1,
+  "raw_responses_in_git": 0,
+  "registration_digest": "57a5f5202559a5e55fc2314e9c7f7324eec96e4d93a925dfabcf778000f27376",
+  "runtime_candidate_chain": [
+    "997e6b55c1c40dacd44a46ff6617b28766011958",
+    "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+    "ba4208a6ea96775683ecd89f41b6cd869b45eead",
+    "596b87e7e9d0551c6b62834137e03eed2bf52c82",
+    "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9",
+    "e0dba46689397f16a967efbc126621df0683f385",
+    "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
+    "587bed9168e92db7444db81ba9123b92a80cbacf",
+    "f00e5d44098e2ef2ef70d76dab67a3e3fdd03ea4",
+    "81289d8619ef831d9d6a79acceaac9090f17ee3a"
+  ],
+  "runtime_candidate_sha": "81289d8619ef831d9d6a79acceaac9090f17ee3a",
+  "scenario_results": [
+    {
+      "card_count": 3,
+      "id": "SCENARIO-01",
+      "result": "PASS"
+    },
+    {
+      "card_count": 1,
+      "id": "SCENARIO-02",
+      "result": "PASS"
+    },
+    {
+      "card_count": 1,
+      "id": "SCENARIO-03",
+      "result": "PASS"
+    },
+    {
+      "card_count": 1,
+      "id": "SCENARIO-04",
+      "result": "PASS"
+    },
+    {
+      "card_count": 4,
+      "id": "SCENARIO-05",
+      "result": "PASS"
+    },
+    {
+      "card_count": 3,
+      "id": "SCENARIO-06",
+      "result": "PASS"
+    },
+    {
+      "card_count": 1,
+      "id": "SCENARIO-07",
+      "result": "PASS"
+    },
+    {
+      "card_count": 1,
+      "id": "SCENARIO-08",
+      "result": "PASS"
+    }
+  ],
+  "status": "PASS",
+  "suite_version": "brand-matrix-gate-d-formal-suite-v10",
+  "temperature": 0,
+  "transport_max_retries": 2
+}

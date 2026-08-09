@@ -3,21 +3,22 @@
   "command": "npm --prefix frontend run contracts:gen",
   "source": {
     "path": "openapi.json",
-    "sha256": "61e0b67f1b08d4f442502ab6401576771fb9ed70eba54cee02977fdcba64ab8c",
+    "sha256": "de301d6d54c49db145bb4cd2b35ebecf1ecadccba0cdc149dddeb0d69151448b",
     "openapi": "3.1.0",
-    "path_count": 104,
-    "schema_count": 60
+    "path_count": 107,
+    "schema_count": 61
   },
   "generated": {
     "path": "frontend/src/shared/contracts/gen/openapi.d.ts",
-    "sha256": "f8e53fe9a72f52de3ad99d85e81996a7da68b43015d1a098d8519cca5e6c450e",
-    "line_count": 8254
+    "sha256": "c570bd24d812a130f4fb3dfe24e0bb5af3a000bb061d5da9107e493d785f0275",
+    "line_count": 8521
   },
   "allowlist": [
     "AccountExpressionVersionRequest",
     "AddSeriesItemRequest",
     "ApplicationHandoffResponse",
     "BrandExpressionConfirmRequest",
+    "BrandFeedbackObservationRequest",
     "BrandLibraryEntryRequest",
     "BrandLibraryPreviewRequest",
     "BrandLibraryVersionRequest",
