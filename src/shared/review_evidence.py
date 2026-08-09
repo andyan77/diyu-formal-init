@@ -6,7 +6,6 @@ from typing import Literal, TypeAlias, cast
 
 from src.shared.creative_kernel import (
     ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM,
-    DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
     LEGACY_KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
@@ -297,8 +296,6 @@ def build_clause_contexts_v2(
         wrapper: str | None = None
         if contract == "hypothetical_example":
             wrapper = f"{HYPOTHESIS_DISCLOSURE}\n"
-        elif contract == "disclosed_dramatization":
-            wrapper = f"{DRAMATIZATION_DISCLOSURE}\n"
         if wrapper is not None:
             if kernel.kernel_version != LEGACY_KERNEL_VERSION:
                 parts = (wrapper, *parts)
@@ -318,7 +315,7 @@ def build_clause_contexts_v2(
             context_text = exact_text.strip() if source == "writer_unit" else exact_text
             if not context_text:
                 raise ValueError("writer clause cannot be only whitespace")
-            if source == "writer_unit" and context_text in {HYPOTHESIS_DISCLOSURE, DRAMATIZATION_DISCLOSURE}:
+            if source == "writer_unit" and context_text == HYPOTHESIS_DISCLOSURE:
                 raise ValueError("writer forged a server wrapper")
             contexts.append(
                 ClauseContextV2(
@@ -824,18 +821,6 @@ def reconcile_review_evidence(
             )
         if (
             kernel.kernel_version == LEGACY_KERNEL_VERSION
-            and unit.allowed_observation_types == ("dramatization",)
-            and not unit.text.startswith(DRAMATIZATION_DISCLOSURE)
-        ):
-            issues.append(
-                NarrativeIssue(
-                    unit.unit_id,
-                    "dramatization_not_visible",
-                    unit.text,
-                )
-            )
-        if (
-            kernel.kernel_version == LEGACY_KERNEL_VERSION
             and unit.allowed_observation_types == ("hypothesis",)
             and not unit.text.startswith(HYPOTHESIS_DISCLOSURE)
         ):
@@ -1117,8 +1102,6 @@ def _valid_server_wrapper(context: ClauseContextV2) -> bool:
     expected = (
         f"{HYPOTHESIS_DISCLOSURE}\n"
         if context.unit_contract == "hypothetical_example"
-        else f"{DRAMATIZATION_DISCLOSURE}\n"
-        if context.unit_contract == "disclosed_dramatization"
         else ""
     )
     return bool(expected) and context.exact_text == expected

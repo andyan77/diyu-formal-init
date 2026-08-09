@@ -38,6 +38,7 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import (
     FrozenFactRecord,
+    ImmutableFactBlock,
     brand_fact_records,
     build_product_fact_packet,
     immutable_fact_blocks_document,
@@ -93,6 +94,31 @@ from src.shared.writer_request import (
     writer_request_digest,
     writer_request_document,
 )
+
+
+def _publication_v3_audit_patch(
+    contract: PublicationContractV3,
+    selected_blocks: tuple[ImmutableFactBlock, ...],
+) -> dict[str, object]:
+    return {
+        "writer_confirmed_product_fact_refs": [block.fact_id for block in selected_blocks],
+        "used_persona_quote_ids": sorted(
+            ref for ref in contract.brand_context_use.consumed_refs if ref.startswith(("PS-S02-", "PS-S04-"))
+        ),
+        "expression_mode": "dramatization",
+    }
+
+
+def _publication_v3_selected_refs(
+    contract: PublicationContractV3,
+    supporting_refs: tuple[str, ...],
+) -> tuple[str, ...]:
+    frozen = (
+        ref
+        for ref in contract.frozen_fact_refs
+        if ref.startswith(("source:user_actuality:", "brand:", "fact:brand:"))
+    )
+    return tuple(dict.fromkeys((*frozen, *supporting_refs)))
 
 
 class DeterministicContentGenerator(ContentGenerator):
@@ -266,18 +292,7 @@ class DeterministicContentGenerator(ContentGenerator):
         output_digest = writer_output_digest(output)
         supporting_refs = product_basis.supporting_fact_refs if product_basis is not None else ()
         selected_blocks = tuple(block for block in fact_blocks if block.fact_id in supporting_refs)
-        selected_refs = tuple(
-            dict.fromkeys(
-                (
-                    *(
-                        ref
-                        for ref in contract.frozen_fact_refs
-                        if ref.startswith("source:user_actuality:") or ref.startswith("brand:")
-                    ),
-                    *supporting_refs,
-                )
-            )
-        )
+        selected_refs = _publication_v3_selected_refs(contract, supporting_refs)
         kernel = build_creative_kernel_v5(
             writer_output_digest=output_digest,
             trusted_fact_refs=selected_refs,
@@ -318,6 +333,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 "writer_request_v3_digest": writer_request_digest(writer_request),
                 "writer_output_v3": writer_output_document(output),
                 "writer_output_v3_digest": output_digest,
+                **_publication_v3_audit_patch(contract, selected_blocks),
                 "expression_plan_version": CREATIVE_KERNEL_V5_VERSION,
                 "expression_plan_digest": checked_digest,
                 "delivery_compiler_version": DELIVERY_COMPILER_V5_VERSION,

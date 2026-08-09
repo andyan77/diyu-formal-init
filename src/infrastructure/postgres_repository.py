@@ -35,6 +35,7 @@ from src.shared.content_snapshot import (
     visible_context_basis,
     visible_direction,
 )
+from src.shared.content_territory import QUALITY_DEMO_SUBJECT_TYPE
 from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_V5_VERSION,
     DELIVERY_COMPILER_VERSION,
@@ -270,6 +271,7 @@ class PostgresContentRepository(ContentRepository):
         {
             "writer_confirmed_product_fact_refs",
             "used_persona_quote_ids",
+            "expression_mode",
         }
     )
     _PUBLICATION_V3_LEGACY_COMPLETION_KEYS = frozenset(
@@ -471,6 +473,8 @@ class PostgresContentRepository(ContentRepository):
         current: Mapping[str, object],
         patch: Mapping[str, object],
     ) -> None:
+        if patch.get("expression_mode") != "dramatization":
+            raise DomainError("Writer 演绎模式审计字段无效")
         fact_refs = cls._completion_ref_list(
             patch.get("writer_confirmed_product_fact_refs"),
             "Writer 确认商品事实引用无效",
@@ -776,6 +780,13 @@ class PostgresContentRepository(ContentRepository):
                 not isinstance(row["applicability"], list)
                 or not row["applicability"]
                 or primary_product in row["applicability"]
+            )
+            and (
+                str(row["semantic_subject_type"]) != QUALITY_DEMO_SUBJECT_TYPE
+                or any(
+                    str(row["semantic_subject_id"]).endswith(f"/{product.sku}")
+                    for product in products
+                )
             )
         ]
         selected = resolve_claim_authority(

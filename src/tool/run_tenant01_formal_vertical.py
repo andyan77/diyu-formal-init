@@ -46,6 +46,11 @@ _GUARANTEE_INPUT = "笛语已经正式保证今年所有产品车缝品质大幅
 _UNKNOWN_SKU_INPUT = "请写 DIYU-NOT-REGISTERED 的车缝品质已经大幅提升"
 _ORDINARY_INPUT = "帮我写一条关于下雨天心情的普通感悟，不要写商品"
 _REVISION_INPUT = "保留事实不变，把开头改得更自然、更像短视频口播。"
+_TENANT01_LEGACY_FACT_SUBJECTS = {
+    ("DIYU-BRAND-BASELINE-001", "line:49"): "brand_positioning",
+    ("DIYU-BRAND-BASELINE-001", "line:55"): "brand_expression",
+    ("DIYU-AUDIENCE-PROFILE-001", "line:42"): "audience_relationship",
+}
 
 
 def _dictionary(value: object, message: str) -> dict[str, object]:
@@ -58,6 +63,44 @@ def _list(value: object, message: str) -> list[object]:
     if not isinstance(value, list):
         raise DomainError(message)
     return cast(list[object], value)
+
+
+def _candidate_item_from_current(
+    item: dict[str, object],
+    *,
+    legacy_effective_at: object | None = None,
+) -> dict[str, object]:
+    """Re-submit only V2 business inputs; governance fields stay server-owned."""
+    fact_subject_by_identity = {
+        ("brand", "identity"): "brand_identity",
+        ("brand", "positioning"): "brand_positioning",
+        ("brand", "audience_relationship"): "audience_relationship",
+        ("brand", "expression"): "brand_expression",
+        ("local_context", "context_summary"): "local_context",
+    }
+    role = str(item["publication_role"])
+    fact_subject = None
+    if role == "public_brand_fact":
+        fact_subject = fact_subject_by_identity.get(
+            (str(item.get("semantic_subject_type")), str(item.get("claim_key")))
+        )
+        if fact_subject is None:
+            fact_subject = _TENANT01_LEGACY_FACT_SUBJECTS.get(
+                (str(item.get("source_id")), str(item.get("source_locator")))
+            )
+        if fact_subject is None:
+            raise DomainError("正式当前投影包含无法还原的受控事实主题")
+    return {
+        "source_segment_id": item["source_segment_id"],
+        "publication_role": role,
+        "published_text": item["published_text"],
+        "applicability": item["applicability"],
+        "visibility_scope": item["visibility_scope"],
+        "organization_ids": item["scope_organization_ids"],
+        "effective_at": item.get("effective_at") or legacy_effective_at,
+        "expires_at": item["expires_at"],
+        "fact_subject": fact_subject,
+    }
 
 
 def _write_private(path: Path, document: dict[str, object]) -> None:
@@ -712,12 +755,10 @@ def run(
             current_response = admin.get("/api/v1/tenant-management/brand-publication")
             current = _dictionary(current_response.json().get("current"), "正式当前投影缺失")
             candidate_payload = [
-                {
-                    "source_segment_id": item["source_segment_id"],
-                    "publication_role": item["publication_role"],
-                    "published_text": item["published_text"],
-                    "applicability": item["applicability"],
-                }
+                _candidate_item_from_current(
+                    item,
+                    legacy_effective_at=current["created_at"],
+                )
                 for item in cast(list[dict[str, object]], current["items"])
             ]
             # Change the ordered projection digest while keeping every item

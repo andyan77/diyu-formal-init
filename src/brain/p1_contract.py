@@ -48,7 +48,6 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         headings: tuple[str, ...] = (
             (
                 "标题",
-                "表达范围",
                 "内容看点",
                 "封面/开头",
                 "完整台词/解说",
@@ -79,7 +78,6 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         headings = (
             (
                 "标题",
-                "表达范围",
                 "内容看点",
                 "首图",
                 "图序与每张职责",

@@ -120,6 +120,10 @@ SELECT projection.id AS projection_id,
        OR qualification.authorization_id IS NULL
        OR authz.logical_account_id = root_account.id
    )
+   AND (
+       item.semantic_subject_type IS DISTINCT FROM 'logical_account_product_mission'
+       OR split_part(item.semantic_subject_id, '/', 1) = root_account.id::text
+   )
  ORDER BY item.position
 """
 

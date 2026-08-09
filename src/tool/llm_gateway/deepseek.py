@@ -43,7 +43,6 @@ from src.shared.closed_review import (
 from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
     CREATIVE_KERNEL_V5_VERSION,
-    DRAMATIZATION_DISCLOSURE,
     DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
     KERNEL_VERSION,
@@ -293,13 +292,14 @@ def _writer_truth_and_persona_instruction(
             "能力或效果断言。\n"
         )
     persona = (
-        "账号画像只提供观察角度，不提供自传。账号人设的第一人称具体经历只能来自"
-        "服务端冻结的授权原句库选择；使用时保持原句事实边界，所选 PS-S02-/PS-S04- 原句 ID"
-        "会冻结进任务快照。当前任务获准使用的原句 ID："
+        "账号人设的第一人称经历可以基于账号画像与本次任务上下文自由演绎，不要求回答该经历"
+        "是否真实发生、由谁经历、何时发生或能否外部核验。获准原句是可选素材，不是创作前提；"
+        "若逐字使用，必须保持原句边界，所选 PS-S02-/PS-S04- ID 会冻结进 used_persona_quote_ids。"
+        "当前任务可用原句 ID："
         + json.dumps(persona_quote_ids, ensure_ascii=False)
-        + "。没有获准原句时，不得写"
-        "‘我曾经／我在店里／我接待过’等已发生的账号经历，可以使用不绑定既成事件的一般观察"
-        "和条件建议。\n"
+        + "。没有使用获准原句时 used_persona_quote_ids 保持为空。不得使用未获授权真实人物的"
+        "姓名、肖像或声音；演绎不得夹带、改写或补充商品性能与商品事实，商品边界仍只由"
+        "confirmed_product_facts 与既有精确机器门决定。\n"
     )
     return assertion_layers + confirmed + judgment + persona
 
@@ -1121,7 +1121,7 @@ class DeepSeekGenerator(ContentGenerator):
                     *(
                         fact_ref
                         for fact_ref in contract.frozen_fact_refs
-                        if fact_ref.startswith("source:user_actuality:") or fact_ref.startswith("brand:")
+                        if fact_ref.startswith(("source:user_actuality:", "brand:", "fact:brand:"))
                     ),
                     *supporting_fact_refs,
                 )
@@ -1205,6 +1205,7 @@ class DeepSeekGenerator(ContentGenerator):
                 ),
                 "publication_contract": publication_contract_document(contract),
                 "publication_contract_digest": publication_contract_digest(contract),
+                "expression_mode": "dramatization",
             },
         )
 
@@ -2352,8 +2353,8 @@ class DeepSeekGenerator(ContentGenerator):
   release_caption 是可直接发布且与正文互补的配文。
 - 可以形成观点、非事实创作观察、条件建议、真实取舍和不绑定现实主体的假设；不要写内部合同、
   字段、验证、防越界或资料说明，也不要把本篇任务或编辑目标换一种说法写进正文。
-- 品牌和账号关系通过本题的观察取舍、受众关系和回应姿态自然体现；不硬插品牌名、商品或服饰
-  结论，也不删除账号立场而退化为通用文案。
+- 账号资料只约束观察取舍、受众关系和回应姿态，不要求作品证明品牌关联。题材始终优先；
+  找不到自然关联时照常完成题材，不硬插品牌名、商品或服饰结论，也不作品牌式收尾。
 - Writer 不拥有媒体单元、MediaProgram 或资源。不要写拍摄、摆放、出镜、场地、道具、图片、
   商品实物或声音指令；Compiler 只会把你完成的内容绑定到预先冻结的槽位。
 {platform_rule}
@@ -2698,10 +2699,10 @@ class DeepSeekGenerator(ContentGenerator):
             else None
         )
         account_link_rule = (
-            """本篇必须让受众从作品本身读出当前账号为什么会说这段话。每个可写 unit 都有
-互不替代的 editorial_responsibility，必须分别完成；不能用同一句账号定义、品牌口号或
-泛化结论同时填满标题、导读、正文和配文。把冻结编辑视角转化为本题独有的观察方式、有限
-判断和受众回报；不得逐字照抄画像标签，不得硬插商品、账号名或品牌名，也不得把表达位置
+            """账号编辑投影只约束观察方式、有限判断和回应姿态，不要求作品证明账号或品牌关联。
+每个可写 unit 的 editorial_responsibility 仍须分别完成；题材始终优先，找不到自然关联时
+照常完成题材，不用账号定义、品牌口号、商品、账号名、品牌名或品牌式收尾找补。不得逐字
+照抄画像标签，也不得把表达位置
 写成真实职业履历、机构事实或已经发生的经历。若存在用户现实原句，必须服从
 actuality_response_boundary：作品可以回应直接可见的反差或选择，但不能解释原因、罗列
 可能成因，或把一次片段概括成生活、人类及关系的普遍规律。若存在系列前情，还必须服从
@@ -2875,8 +2876,8 @@ track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返�
 填写服务端已分配的 hypothesis 或 disclosed_dramatization 单元。hypothesis 可以写推演但
 不要自行添加“假设”标识，Compiler 会为整个单元及独立传播出口保留范围；它不能绑定真实
 用户、员工、顾客、门店或已经发生的历史。disclosed_dramatization 必须写成完整虚构情境，
-但不要自行添加演绎声明，Compiler
-会提供不可编辑的可见范围。recommendation 必须写清楚这是可以怎样做的建议，不得伪装成
+但不要自行添加面向受众的演绎声明；服务端会在版本审计元数据中记录 expression_mode。
+recommendation 必须写清楚这是可以怎样做的建议，不得伪装成
 已执行做法。actuality_reflection 对应的用户现实原文
 已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
@@ -2886,8 +2887,8 @@ skeleton 中的 prior_version 单元已经由服务端冻结，
 actuality_reflection 的创作表达必须与冻结现实保持因果独立：不得解释、诊断、否定或纠正
 现实对象为什么变化、人物为什么产生某种感受；只能在不主张原因的前提下，给出由这段片段
 触发的一般观察、选择角度或可选行动。
-title 也属于服务端预分配的 creative_expression。Compiler 只为整篇插入一次自然范围说明，
-不会替你创作标题前缀、概要、互动句、图序或固定文字卡。
+title 也属于服务端预分配的 creative_expression。Compiler 不会替你创作标题前缀、概要、
+互动句、图序、固定文字卡或面向受众的演绎声明。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。{media_instruction}
 Writer-owned clause 不得让当前表达者或第一人称复数承担
@@ -3216,8 +3217,6 @@ JSON。"""
             disclosure = (
                 HYPOTHESIS_DISCLOSURE
                 if contract == "hypothetical_example"
-                else DRAMATIZATION_DISCLOSURE
-                if contract == "disclosed_dramatization"
                 else None
             )
             if disclosure is not None:
@@ -3277,8 +3276,8 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 当前问题：{json.dumps(findings, ensure_ascii=False)}
 
 修复后仍只写创作文字，不得返回 scene、actor、resource、action、sound、production_note、
-来源、约束或语义合同。hypothesis/dramatization 的可见包裹由服务端加入，修复文字不得重复
-这些包裹。recommendation unit 的每个 clause 都必须带显式建议、条件或意愿语态，
+来源、约束或语义合同。hypothesis 的条件范围由服务端加入；dramatization 只进入审计元数据，
+不得在修复文字中补面向受众的声明。recommendation unit 的每个 clause 都必须带显式建议、条件或意愿语态，
 不得写具体时间、地点、对白、情境例子或抽象收束。按以下稳定含义修复全部 findings：
 - situated_event_in_observation / recommendation_in_observation：把完整 unit 重写为其冻结
   contract 允许的抽象状态、关系判断或观看回报，不保留、换写或搬运具体情境与建议；
@@ -4517,8 +4516,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             ),
             "hypothesis": ("全部块为 hypothesis，最终可见文字自然保留条件和可能性，不能写成已经发生。"),
             "dramatization": (
-                "全部块为 dramatization。可以创造角色和情节，但每个独立可见块都要自然显出这是"
-                "情境演绎，不能绑定用户、真实员工、顾客、品牌案例或门店现场。"
+                "全部块为 dramatization。可以创造角色和情节；演绎属性由服务端记入审计元数据，"
+                "正文不添加声明，且不能绑定用户、真实员工、顾客、品牌案例或门店现场。"
             ),
         }[frame.narrative_mode]
         prior = request.prior_saved_body or "（首次生成）"
@@ -4606,8 +4605,8 @@ fact_refs 指向精确事实；constraint_refs 只能约束语气、角色、方
 general_observation 只写 abstract_principle；situated_event 不因省略人物称谓而成为抽象观点。
 institutional_assertion 必须逐字等于该块允许的精确品牌事实，否则不要写。
 confirmed_fact 必须逐字等于该块允许的精确事实，不得改写。
-hypothesis 必须在每个可见槽位保持条件语气。dramatization 必须在每个可见槽位自然表明演绎，
-且不能绑定真实用户、员工、顾客、品牌历史或未登记资源。
+hypothesis 必须在每个可见槽位保持条件语气。dramatization 由服务端记入审计元数据，正文不加
+演绎声明，且不能绑定真实用户、员工、顾客、品牌历史或未登记资源。
 所有标题、正文、口播、字幕、画面、动作、声音、制作提示和发布配文都来自这些槽位；
 不要暴露内部 id、类型、来源、约束、规则或审查说明。"""
 
@@ -4673,7 +4672,7 @@ observation_type 只选：
   做法或形成历史；
 - user_actuality：逐字用户真人事实；
 - hypothesis：可见保留条件／可能性的推演；
-- dramatization：可见自然表明是创作演绎；
+- dramatization：文字实际铺陈虚构角色与情境动作，审计模式由服务端记录；
 - confirmed_fact：冻结品牌／组织／商品状态；
 - uncertain：无法确定。
 这里的类型判断的是文字语义，不是画面采用了什么制作形式。“抽象构图”“色块”
@@ -4681,8 +4680,8 @@ observation_type 只选：
 abstract_principle 或 hypothesis 判断。possessions 只提取文字主张现实人物持有、或制作确实
 需要的实体物件；原创抽象构成中的线条、色块、标点、文字和明确的图形符号不是现实持有物。
 一般题材里只要出现具体人物做事、对白、动机、结果、时间地点或持有物，必须如实提取，不能因
-语气温和而归为空。演绎只有在目标自身存在自然可见提示时才填 dramatization，并把提示逐字放入
-dramatization_disclosure_spans；删掉提示会像现实叙述时不能留空。resource_refs 填该 scene
+语气温和而归为空。演绎按文字是否实际铺陈虚构角色与情境动作判断；
+dramatization_disclosure_spans 在新合同中保持为空。resource_refs 填该 scene
 实际需要的登记资源 id；若需要未登记人物、家、店、厨房、家具、照片、现场声音或道具，填
 unregistered:加简短名称。用户事实来源不是资源。instruction_conflicts 逐字列出与用户要求冲突
 的目标片段；没有则空。任何语义无法确定时 uncertain=true。

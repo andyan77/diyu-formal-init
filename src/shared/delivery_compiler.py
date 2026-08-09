@@ -6,7 +6,6 @@ from typing import Literal, TypeAlias
 
 from src.shared.creative_kernel import (
     CREATIVE_KERNEL_V5_VERSION,
-    DRAMATIZATION_DISCLOSURE,
     DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
     KERNEL_VERSION,
@@ -89,15 +88,15 @@ _PHRASES: dict[str, str] = {
     "phrase:graphic-hero": "使用原创标题文字卡与留白排版，不调用现实人物、场地或道具。",
     "phrase:graphic-product-hero": "使用已登记商品近景与标题排版，不增加未登记道具。",
     "phrase:graphic-sequence": (
-        "第 1 张为保留表达范围的标题文字卡；中间页按冻结顺序排入已标识的创作表达与事实原句；末页使用发布配文收束。"
+        "第 1 张为标题文字卡；中间页按冻结顺序排入正文与事实原句；末页使用发布配文收束。"
     ),
     "phrase:graphic-sequence-four": (
-        "只补拍四张：第 1 张为保留表达范围的标题文字卡；第 2、3 张按冻结顺序"
-        "排入已标识的创作表达与事实原句；第 4 张使用发布配文收束。"
+        "只补拍四张：第 1 张为标题文字卡；第 2、3 张按冻结顺序"
+        "排入正文与事实原句；第 4 张使用发布配文收束。"
     ),
     "phrase:graphic-layout": "使用原创文字卡、基础排版和留白；只可加入本次冻结的已登记素材。",
-    "phrase:video-cover": "以保留表达范围的原创标题文字卡作为封面或首帧，不要求现实场地或道具。",
-    "phrase:video-flow": "标题文字卡进入已标识的正文旁白或文字卡，按冻结顺序展开，再由发布配文自然收束。",
+    "phrase:video-cover": "以原创标题文字卡作为封面或首帧，不要求现实场地或道具。",
+    "phrase:video-flow": "标题文字卡进入正文旁白或文字卡，按冻结顺序展开，再由发布配文自然收束。",
     "phrase:video-action": "用原创文字卡按冻结顺序切换，不重演用户现实，也不增加人物、场地或道具。",
     "phrase:video-product-action": "只使用已登记商品近景与原创文字卡按冻结顺序切换，不增加人物、场地或道具。",
     "phrase:video-drama": ("演绎段使用文字对话卡或创作者一人分段旁白；不表示第二演员或家庭现场存在。"),
@@ -106,16 +105,16 @@ _PHRASES: dict[str, str] = {
     "phrase:scope-user-fact": "你提到：",
     "phrase:scope-brand-fact": "",
     "phrase:scope-product-fact": "已确认的商品信息：",
-    "phrase:scope-general": "下面是创作性的生活观察，不对应真实人物或经历：",
+    "phrase:scope-general": "",
     "phrase:scope-recommendation": "不妨试试：",
     "phrase:scope-hypothesis": HYPOTHESIS_DISCLOSURE,
-    "phrase:scope-dramatization": DRAMATIZATION_DISCLOSURE,
+    "phrase:scope-dramatization": "",
     "phrase:title-general": "一种生活观察：",
     "phrase:title-user-fact": "从你提供的片段出发：",
     "phrase:title-confirmed-fact": "从已确认的信息出发：",
     "phrase:title-hypothesis": "假设一下：",
-    "phrase:title-dramatization": "情景演绎：",
-    "phrase:artifact-general": "以下是围绕这个主题的创作表达，不对应真实人物或经历。",
+    "phrase:title-dramatization": "",
+    "phrase:artifact-general": "",
     "phrase:artifact-user-fact": USER_ACTUALITY_VISIBLE_SCOPE,
     "phrase:artifact-confirmed-fact": ("以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"),
     "phrase:artifact-recommendation": "以下是可选择的创作建议，不表示已经执行。",
@@ -125,8 +124,8 @@ _PHRASES: dict[str, str] = {
     ),
     "phrase:artifact-hypothesis": "下面的片段是假设，不代表真实发生。",
     "phrase:artifact-user-fact-hypothesis": ("以下保留你提供的真实片段；其余是创作性推演，不作为这段经历的事实补充。"),
-    "phrase:artifact-dramatization": "以下内容包含情景演绎，不对应真实人物或经历。",
-    "phrase:artifact-user-fact-drama": ("以下内容保留你提供的真实片段；小剧场为情景演绎，不对应现实经历。"),
+    "phrase:artifact-dramatization": "",
+    "phrase:artifact-user-fact-drama": USER_ACTUALITY_VISIBLE_SCOPE,
 }
 
 
@@ -680,7 +679,7 @@ def _assert_compiled_delivery_v5(
 def _v5_visible_fact(fact_ref: str, exact_text: str) -> str:
     if fact_ref.startswith("source:user_actuality:"):
         return f"{_PHRASES['phrase:scope-user-fact']}“{exact_text}”"
-    if fact_ref.startswith("brand:"):
+    if fact_ref.startswith(("brand:", "fact:brand:")):
         return exact_text
     return f"{_PHRASES['phrase:scope-product-fact']}{exact_text}"
 
@@ -1975,7 +1974,6 @@ def _visible_body_v3(
 ) -> str:
     if isinstance(production, VideoProductionBundle):
         sections: tuple[tuple[str, str], ...] = (
-            ("表达范围", artifact_scope),
             (
                 v3_compiler_visible_heading("video", "natural_guide"),
                 production.natural_guide,
@@ -2018,7 +2016,6 @@ def _visible_body_v3(
         )
     else:
         sections = (
-            ("表达范围", artifact_scope),
             (
                 v3_compiler_visible_heading("graphic", "natural_guide"),
                 production.natural_guide,
@@ -2054,4 +2051,15 @@ def _visible_body_v3(
                 else ()
             ),
         )
-    return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
+    return _v3_visible_sections(title, artifact_scope, sections)
+
+
+def _v3_visible_sections(
+    title: str,
+    artifact_scope: str,
+    sections: tuple[tuple[str, str], ...],
+) -> str:
+    scoped_sections = (("表达范围", artifact_scope), *sections) if artifact_scope else sections
+    return "标题：" + title + "\n\n" + "\n\n".join(
+        f"{heading}：{value}" for heading, value in scoped_sections
+    )

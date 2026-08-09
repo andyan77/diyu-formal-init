@@ -1503,7 +1503,11 @@ def test_publication_v3_product_prompt_exposes_confirmed_values_and_keeps_j_cond
     assert "如果你需要／如果你的条件是" in prompt
     assert "它适合／它提供／它能带来" in prompt
     assert "PS-S02-/PS-S04-" in prompt
-    assert "我在店里" in prompt
+    assert "第一人称经历可以基于账号画像与本次任务上下文自由演绎" in prompt
+    assert "获准原句是可选素材，不是创作前提" in prompt
+    assert "未获授权真实人物的姓名、肖像或声音" in prompt
+    assert "演绎不得夹带、改写或补充商品性能与商品事实" in prompt
+    assert "没有获准原句时不得写已发生的账号经历" not in prompt
 
 
 def test_publication_v3_still_rejects_exact_account_profile_copy() -> None:
@@ -1794,7 +1798,7 @@ def test_kernel_repair_prompt_never_exposes_service_disclosure_as_writer_text() 
 
     assert '"current_text": "一方先停一下，另一方也不必马上给出答案。"' in prompt
     assert '"current_text": "假设有这样一幕：' not in prompt
-    assert "修复文字不得重复\n这些包裹" in prompt
+    assert "面向受众的演绎声明" not in prompt
 
 
 def test_actuality_revision_repair_replays_reviewed_unit_not_failed_draft() -> None:
@@ -3515,7 +3519,7 @@ def test_new_kernel_runtime_does_not_consume_external_reviewer_payload() -> None
     assert "reviewer_model" not in artifact.completion_snapshot_patch
 
 
-def test_general_writer_text_is_compiled_inside_a_visible_non_fact_scope() -> None:
+def test_general_writer_text_uses_audit_scope_without_visible_disclosure() -> None:
     request = _kernel_request()
     raw = _kernel_writer(
         body="饭桌上一句话让两个人都沉默。",
@@ -3525,7 +3529,8 @@ def test_general_writer_text_is_compiled_inside_a_visible_non_fact_scope() -> No
     artifact = _generator().generate(request)
 
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert "下面是创作性的生活观察，不对应真实人物或经历：饭桌上" in artifact.production.full_body
+    assert "饭桌上一句话让两个人都沉默。" in artifact.production.full_body
+    assert "不对应真实人物或经历" not in artifact.production.full_body
     assert len(FakeClient.requests) == 1
 
 

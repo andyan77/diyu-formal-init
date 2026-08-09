@@ -6,7 +6,6 @@ from typing import Literal
 import pytest
 
 from src.shared.creative_kernel import (
-    DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
     OBSERVATION_ONLY_PROGRAM,
     CreativeKernelV1,
@@ -216,19 +215,11 @@ def _raw_v2_evidence(
     }
 
 
-@pytest.mark.parametrize(
-    ("sdr_id", "mode", "expected_wrapper"),
-    (
-        ("SDR-001", "hypothesis", HYPOTHESIS_DISCLOSURE),
-        ("SDR-004", "dramatization", DRAMATIZATION_DISCLOSURE),
-    ),
-)
 def test_server_wrapper_source_precedes_model_semantics(
-    sdr_id: str,
-    mode: Literal["hypothesis", "dramatization"],
-    expected_wrapper: str,
 ) -> None:
-    _, _, contexts = _frame_and_kernel(mode=mode)
+    sdr_id = "SDR-001"
+    expected_wrapper = HYPOTHESIS_DISCLOSURE
+    _, _, contexts = _frame_and_kernel(mode="hypothesis")
     wrapper = next(context for context in contexts if context.text_source == "server_wrapper")
     evidence = _evidence(
         contexts,
@@ -243,40 +234,29 @@ def test_server_wrapper_source_precedes_model_semantics(
     assert sdr_id in _ALL_SDR_IDS
 
 
-@pytest.mark.parametrize(
-    ("sdr_id", "mode", "wrapper"),
-    (
-        ("SDR-002", "general_observation", HYPOTHESIS_DISCLOSURE),
-        ("SDR-005", "general_observation", DRAMATIZATION_DISCLOSURE),
-    ),
-)
 def test_writer_cannot_forge_server_wrapper(
-    sdr_id: str,
-    mode: Literal["general_observation"],
-    wrapper: str,
 ) -> None:
+    sdr_id = "SDR-002"
+    wrapper = HYPOTHESIS_DISCLOSURE
     with pytest.raises(ValueError, match="forged a server wrapper"):
-        _frame_and_kernel(mode=mode, body=wrapper)
+        _frame_and_kernel(mode="general_observation", body=wrapper)
     assert sdr_id in _ALL_SDR_IDS
 
 
-@pytest.mark.parametrize(
-    ("sdr_id", "mode"),
-    (
-        ("SDR-003", "hypothesis"),
-        ("SDR-006", "dramatization"),
-    ),
-)
 def test_v2_server_wrapper_is_derived_from_frozen_mode(
-    sdr_id: str,
-    mode: Literal["hypothesis", "dramatization"],
 ) -> None:
-    _, _, contexts = _frame_and_kernel(mode=mode)
-    expected = HYPOTHESIS_DISCLOSURE if mode == "hypothesis" else DRAMATIZATION_DISCLOSURE
+    sdr_id = "SDR-003"
+    _, _, contexts = _frame_and_kernel(mode="hypothesis")
+    expected = HYPOTHESIS_DISCLOSURE
     assert any(
         context.text_source == "server_wrapper" and context.exact_text == f"{expected}\n" for context in contexts
     )
     assert sdr_id in _ALL_SDR_IDS
+
+
+def test_dramatization_has_no_visible_server_wrapper() -> None:
+    _, _, contexts = _frame_and_kernel(mode="dramatization")
+    assert all(context.text_source != "server_wrapper" for context in contexts)
 
 
 @pytest.mark.parametrize(

@@ -16,15 +16,25 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.content_territory import (
+    QUALITY_DEMO_AUTHORITY_CLASS,
+    QUALITY_DEMO_SUBJECT_TYPE,
+)
 from src.shared.publication_scope import publication_projection_v2_digest, qualification_digest
 from src.shared.types import TenantManagementScope
 
-GATE_D_CONTRACT_VERSION = "brand-matrix-gate-d-import-v2"
+GATE_D_CONTRACT_VERSION = "brand-matrix-gate-e-r1-import-v3"
 EXPECTED_MANIFEST_SHA256 = "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06"
 FOUNDER_ATTESTATION_REF = "ATT-GATEA-20260808-01"
 AUTHORIZATION_AMENDMENT_ID = "AMD-AUTH-20260809-01"
 AUTHORIZATION_AMENDMENT_SHA256 = "e5c3ae916a1d3663c0a7df0a40a9b24094044417236d57c1550cec4d66d00291"
 AUTHORIZATION_AMENDMENT_COMMIT = "b107ee02ac39acd93dfb259b9f3e73d3f7318792"
+CONTENT_TERRITORY_AMENDMENT_ID = "AMD-CONTENT-TERRITORY-20260809-01"
+QUALITY_CONTROL_SOURCE_ID = "GATEA-SUPPLEMENT-QUALITY-CONTROL-001"
+QUALITY_CONTROL_SOURCE_SHA256 = "62b43ff4ba93f6856b50c95486574a7b2ec966669b4d828fc18b0c2894fb1d7a"
+QUALITY_CONTROL_SOURCE_PATH = Path(
+    "docs/BRAND-MATRIX-01/素材草案-v0/05-品控记录汇编-演示补充.md"
+)
 
 
 def matrix_id(label: str) -> UUID:
@@ -128,6 +138,8 @@ class MatrixImportPlan:
     counts: dict[str, int]
     source_sha256s: tuple[tuple[str, str], ...]
     authorization_amendment_sha256: str
+    content_territory_amendment_sha256: str
+    quality_control_source_sha256: str
 
     def document(self) -> dict[str, object]:
         return {
@@ -140,7 +152,17 @@ class MatrixImportPlan:
                 {"document_id": document_id, "sha256": digest} for document_id, digest in self.source_sha256s
             ],
             "authorization_amendment_sha256": self.authorization_amendment_sha256,
+            "content_territory_amendment_sha256": self.content_territory_amendment_sha256,
+            "quality_control_source_sha256": self.quality_control_source_sha256,
         }
+
+
+@dataclass(frozen=True)
+class QualityControlDemoRecord:
+    record_id: str
+    cspu_id: str
+    exact_text: str
+    publishable: bool
 
 
 class BrandMatrixImporter:
@@ -219,6 +241,27 @@ class BrandMatrixImporter:
         amendment_sha256 = hashlib.sha256(amendment_path.read_bytes()).hexdigest()
         if amendment_sha256 != AUTHORIZATION_AMENDMENT_SHA256:
             raise ValueError("Gate D authorization amendment digest drifted")
+        quality_source_path = self._repository_root / QUALITY_CONTROL_SOURCE_PATH
+        quality_source_sha256 = hashlib.sha256(quality_source_path.read_bytes()).hexdigest()
+        if quality_source_sha256 != QUALITY_CONTROL_SOURCE_SHA256:
+            raise ValueError("Gate E quality-control supplement digest drifted")
+        amendment = next(
+            (
+                cast(dict[str, Any], item)
+                for item in cast(list[object], contract.get("amendments", []))
+                if isinstance(item, dict)
+                and item.get("amendment_id") == CONTENT_TERRITORY_AMENDMENT_ID
+            ),
+            None,
+        )
+        if amendment is None:
+            raise ValueError("Gate E content-territory amendment is missing")
+        content_territory_amendment_sha256 = hashlib.sha256(
+            json.dumps(amendment, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        records = self._quality_control_records()
+        if len(records) != 5 or sum(record.publishable for record in records) != 4:
+            raise ValueError("quality-control supplement must resolve to four publishable and one internal record")
         documents = self._documents(contract)
         source_sha256s = tuple((str(record["document_id"]), str(record["sha256"])) for record, _, _ in documents)
         counts = {str(key): int(value) for key, value in cast(dict[str, Any], contract["counts"]).items()}
@@ -229,6 +272,8 @@ class BrandMatrixImporter:
             "source_sha256s": source_sha256s,
             "authorization_amendment_id": AUTHORIZATION_AMENDMENT_ID,
             "authorization_amendment_sha256": amendment_sha256,
+            "content_territory_amendment_sha256": content_territory_amendment_sha256,
+            "quality_control_source_sha256": quality_source_sha256,
             "tenant_id": str(TENANT_ID),
             "brand_id": str(BRAND_ID),
         }
@@ -252,6 +297,8 @@ class BrandMatrixImporter:
             counts=counts,
             source_sha256s=source_sha256s,
             authorization_amendment_sha256=amendment_sha256,
+            content_territory_amendment_sha256=content_territory_amendment_sha256,
+            quality_control_source_sha256=quality_source_sha256,
         )
 
     def apply(self, plan: MatrixImportPlan) -> dict[str, object]:
@@ -260,6 +307,12 @@ class BrandMatrixImporter:
             raise ValueError("import inputs changed after dry-run")
         if fresh.authorization_amendment_sha256 != plan.authorization_amendment_sha256:
             raise ValueError("authorization amendment changed after dry-run")
+        if (
+            fresh.content_territory_amendment_sha256
+            != plan.content_territory_amendment_sha256
+            or fresh.quality_control_source_sha256 != plan.quality_control_source_sha256
+        ):
+            raise ValueError("content-territory import inputs changed after dry-run")
         if fresh.action == "no_op":
             return {
                 "status": "no_op",
@@ -310,6 +363,9 @@ class BrandMatrixImporter:
                             "amendment_id": "AMD-2026-0808-01",
                             "authorization_amendment_id": AUTHORIZATION_AMENDMENT_ID,
                             "authorization_amendment_sha256": plan.authorization_amendment_sha256,
+                            "content_territory_amendment_id": CONTENT_TERRITORY_AMENDMENT_ID,
+                            "content_territory_amendment_sha256": plan.content_territory_amendment_sha256,
+                            "quality_control_source_sha256": plan.quality_control_source_sha256,
                         }
                     ),
                 ),
@@ -455,6 +511,81 @@ class BrandMatrixImporter:
             if not inserted:
                 raise ValueError("organization hierarchy is cyclic")
         return ids
+
+    def _quality_control_records(self) -> tuple[QualityControlDemoRecord, ...]:
+        path = self._repository_root / QUALITY_CONTROL_SOURCE_PATH
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != QUALITY_CONTROL_SOURCE_SHA256:
+            raise ValueError("Gate E quality-control supplement digest drifted")
+        records: list[QualityControlDemoRecord] = []
+        current_id: str | None = None
+        fields: dict[str, str] = {}
+
+        def clean(value: str) -> str:
+            return re.sub(r"[`*]", "", value).strip()
+
+        def finish() -> None:
+            nonlocal current_id, fields
+            if current_id is None:
+                return
+            status = fields.get("状态", "")
+            publishable = "已关闭" in status and "未关闭" not in status
+            product_match = re.search(r"DIYU-CSPU-\d{3}", fields.get("关联商品", ""))
+            if product_match is None:
+                raise ValueError(f"quality-control record lacks a product identity: {current_id}")
+            ordered_labels = (
+                "关联商品",
+                "记录日期",
+                "检查环节",
+                "责任组织",
+                "检查内容",
+                "异常描述",
+                "检查结论",
+                "处置动作",
+                "明确未做",
+                "状态",
+                "对外",
+                "对外表达约束",
+                "与商品口径的关系",
+            )
+            details = [f"{label}：{fields[label]}" for label in ordered_labels if fields.get(label)]
+            exact_text = (
+                "演示品控记录（仅演示，不得当作真实批次证据）："
+                f"记录编号：{current_id}；" + "；".join(details)
+            )
+            records.append(
+                QualityControlDemoRecord(
+                    current_id,
+                    product_match.group(0),
+                    exact_text,
+                    publishable,
+                )
+            )
+            current_id = None
+            fields = {}
+
+        for line in content.decode("utf-8-sig").splitlines():
+            heading = re.match(r"^### `([^`]+)`$", line)
+            if heading:
+                finish()
+                current_id = heading.group(1)
+                continue
+            if current_id is None:
+                continue
+            table_row = re.match(r"^\| (.+?) \| (.+?) \|$", line)
+            if table_row and table_row.group(1) not in {"项", "---"}:
+                fields[clean(table_row.group(1))] = clean(table_row.group(2))
+        finish()
+        expected_ids = {
+            "DEMO-QC-013-2607-01",
+            "DEMO-QC-006-2606-02",
+            "DEMO-QC-001-2605-01",
+            "DEMO-QCX-2606-011",
+            "DEMO-QCX-2608-003",
+        }
+        if {record.record_id for record in records} != expected_ids:
+            raise ValueError("quality-control supplement records drifted")
+        return tuple(records)
 
     @staticmethod
     def _insert_users(cursor: psycopg.Cursor[dict[str, object]], organization_ids: dict[str, UUID]) -> None:
@@ -668,10 +799,13 @@ class BrandMatrixImporter:
                 "GATEA-SUPPLEMENT-PERSON-SOURCES-001",
                 Path("docs/BRAND-MATRIX-01/素材草案-v0/04-人物现实原句库.md"),
             ),
+            (QUALITY_CONTROL_SOURCE_ID, QUALITY_CONTROL_SOURCE_PATH),
         ):
             path = self._repository_root / relative_path
             content_bytes = path.read_bytes()
             digest = hashlib.sha256(content_bytes).hexdigest()
+            if source_id == QUALITY_CONTROL_SOURCE_ID and digest != QUALITY_CONTROL_SOURCE_SHA256:
+                raise ValueError("Gate E quality-control supplement digest drifted")
             document_id = matrix_id(f"source-document:{source_id}")
             version_id = matrix_id(f"source-document:{source_id}:v1")
             cursor.execute(
@@ -1297,6 +1431,59 @@ class BrandMatrixImporter:
                     },
                 }
             )
+        quality_document_id, quality_version_id, _ = document_ids[QUALITY_CONTROL_SOURCE_ID]
+        for record in self._quality_control_records():
+            source_digest = hashlib.sha256(record.exact_text.encode()).hexdigest()
+            segment_id = matrix_id(f"publication-segment:quality-demo:{record.record_id}")
+            cursor.execute(
+                "INSERT INTO brand_source_segments "
+                "(id,tenant_id,brand_id,document_id,document_version_id,segment_key,heading_path,source_locator,exact_text,"
+                "semantic_kind,evidence_level,applicability,visibility_scope,digest) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'headquarters',%s)",
+                (
+                    segment_id,
+                    TENANT_ID,
+                    BRAND_ID,
+                    quality_document_id,
+                    quality_version_id,
+                    f"quality-demo:{record.record_id}",
+                    [record.record_id],
+                    f"素材草案-v0/05 {record.record_id}",
+                    record.exact_text,
+                    "brand_fact" if record.publishable else "source_catalog_only",
+                    (
+                        "demo_only_not_real_batch_evidence"
+                        if record.publishable
+                        else "demo_internal_unclosed_not_writer"
+                    ),
+                    "P2" if record.publishable else "internal_only",
+                    source_digest,
+                ),
+            )
+            if not record.publishable:
+                continue
+            position = len(items) + 1
+            item = {
+                "position": position,
+                "publication_role": "public_brand_fact",
+                "published_text": record.exact_text,
+                "applicability": ["product_truth"],
+                "source_kind": "brand_source_segment",
+                "source_ref": str(segment_id),
+                "source_version": "demo-v1",
+                "source_digest": source_digest,
+                "visibility_scope": "headquarters",
+                "scope_organization_ids": [str(organization_ids["DIYU-HQ-001"])],
+                "effective_at": datetime(2026, 8, 7, tzinfo=timezone.utc),
+                "expires_at": None,
+                "authority_class": QUALITY_DEMO_AUTHORITY_CLASS,
+                "semantic_subject_type": QUALITY_DEMO_SUBJECT_TYPE,
+                "semantic_subject_id": f"{account_ids['H04']}/{record.cspu_id}",
+                "claim_key": record.record_id,
+                "scope_contract_version": "publication-item-scope-v2",
+            }
+            items.append(item)
+            stored.append({"segment_id": segment_id, "item": item, "qualification": None})
         projection_id = matrix_id("publication-projection:v2")
         digest = publication_projection_v2_digest(items)
         cursor.execute(
@@ -1430,6 +1617,17 @@ class BrandMatrixImporter:
                 "SELECT count(*) FROM brand_publication_projection_items item "
                 "JOIN brands brand ON brand.tenant_id=item.tenant_id AND brand.id=item.brand_id "
                 "WHERE item.tenant_id=%s AND item.brand_id=%s AND item.projection_id=brand.current_publication_projection_id"
+            ),
+            "quality_demo_segments": (
+                "SELECT count(*) FROM brand_source_segments WHERE tenant_id=%s AND brand_id=%s "
+                "AND segment_key LIKE 'quality-demo:%%'"
+            ),
+            "quality_demo_projection_items": (
+                "SELECT count(*) FROM brand_publication_projection_items item "
+                "JOIN brands brand ON brand.tenant_id=item.tenant_id AND brand.id=item.brand_id "
+                "WHERE item.tenant_id=%s AND item.brand_id=%s "
+                "AND item.projection_id=brand.current_publication_projection_id "
+                "AND item.semantic_subject_type='logical_account_product_mission'"
             ),
         }
         result: dict[str, object] = {}

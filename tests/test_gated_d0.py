@@ -242,6 +242,7 @@ def _rerun03_completion_patch(
         "writer_output_v3_digest": "2" * 64,
         "writer_confirmed_product_fact_refs": ([_RERUN03_FACT_ID] if fact_refs is None else fact_refs),
         "used_persona_quote_ids": normalized_quote_ids,
+        "expression_mode": "dramatization",
         "expression_plan_version": "creative-kernel-v5",
         "expression_plan_digest": "3" * 64,
         "delivery_compiler_version": DELIVERY_COMPILER_V5_VERSION,
@@ -565,9 +566,10 @@ def test_gated_rerun03_completion_snapshot_commits_the_failed_shape(
     assert fixture["source_failure_code"] == ("PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED")
     _, content_scope, _, _ = _seed_d0_scope(migrator_database_url)
     patch = _rerun03_completion_patch()
-    assert sorted(key for key in patch if key in PostgresContentRepository._PUBLICATION_V3_GROUNDING_KEYS) == sorted(
-        cast(list[str], fixture["required_completion_fields"])
+    assert set(cast(list[str], fixture["required_completion_fields"])) < set(
+        key for key in patch if key in PostgresContentRepository._PUBLICATION_V3_GROUNDING_KEYS
     )
+    assert patch["expression_mode"] == "dramatization"
     repository = PostgresContentRepository(app_database_url)
     context = BrandContext(
         brand_name="笛语",
@@ -621,6 +623,7 @@ def test_gated_rerun03_completion_snapshot_commits_the_failed_shape(
     assert committed_snapshot is not None
     assert committed_snapshot["writer_confirmed_product_fact_refs"] == [_RERUN03_FACT_ID]
     assert committed_snapshot["used_persona_quote_ids"] == []
+    assert committed_snapshot["expression_mode"] == "dramatization"
 
 
 def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -> None:
@@ -633,6 +636,7 @@ def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -
     audit = PostgresContentRepository._version_audit_snapshot(merged, "8" * 64)
     assert audit["writer_confirmed_product_fact_refs"] == [_RERUN03_FACT_ID]
     assert audit["used_persona_quote_ids"] == []
+    assert audit["expression_mode"] == "dramatization"
 
     unknown = patch | {"unregistered_completion_field": "must-stay-closed"}
     with pytest.raises(DomainError, match="字段不完整或越界"):
@@ -651,6 +655,7 @@ def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -
     legacy_patch = dict(patch)
     legacy_patch.pop("writer_confirmed_product_fact_refs")
     legacy_patch.pop("used_persona_quote_ids")
+    legacy_patch.pop("expression_mode")
     legacy = PostgresContentRepository._validated_completion_snapshot(
         task_snapshot,
         legacy_patch,
@@ -661,8 +666,10 @@ def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -
     )
     assert "writer_confirmed_product_fact_refs" not in legacy
     assert "used_persona_quote_ids" not in legacy
+    assert "expression_mode" not in legacy
     assert "writer_confirmed_product_fact_refs" not in legacy_audit
     assert "used_persona_quote_ids" not in legacy_audit
+    assert "expression_mode" not in legacy_audit
     assert legacy["publication_contract_digest"] == merged["publication_contract_digest"]
     assert legacy_audit["artifact_digest"] == audit["artifact_digest"]
 

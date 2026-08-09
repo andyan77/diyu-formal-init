@@ -144,18 +144,14 @@ def test_writer_cannot_return_or_change_track_contract() -> None:
         )
 
 
-def test_compiler_scopes_general_observation_in_every_visible_exit() -> None:
+def test_compiler_keeps_dramatization_disclosure_out_of_every_visible_exit() -> None:
     _, kernel = _parse()
     compiled = _compile(kernel)
     assert compiled.outline.startswith("一种生活观察：")
-    assert "下面是创作性的生活观察，不对应真实人物或经历：" in compiled.body
+    assert "不对应真实人物或经历" not in compiled.body
     assert hasattr(compiled.production, "full_body")
-    assert compiled.production.full_body.startswith(
-        "下面是创作性的生活观察，不对应真实人物或经历："
-    )
-    assert compiled.production.release_caption_and_interaction.startswith(
-        "以下是围绕这个主题的创作表达，不对应真实人物或经历。"
-    )
+    assert "不对应真实人物或经历" not in compiled.production.full_body
+    assert "不对应真实人物或经历" not in compiled.production.release_caption_and_interaction
 
 
 def test_trusted_user_fact_is_exact_and_separate_from_creative_text() -> None:
@@ -216,8 +212,8 @@ def test_g7_adds_only_local_disclosed_dramatization() -> None:
     assert v2.unit("unit:body").text_source == "prior_version"
     assert next(unit.text for unit in v2.units if unit.track == "trusted_fact") == fact
     compiled = _compile(v2)
-    assert compiled.outline.startswith("情景演绎：")
-    assert "以下是情景演绎，不对应真实人物或经历：" in compiled.body
+    assert not compiled.outline.startswith("情景演绎：")
+    assert "不对应真实人物或经历" not in compiled.body
 
 
 def test_negated_local_dramatization_request_keeps_prior_program() -> None:

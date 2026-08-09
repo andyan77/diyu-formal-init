@@ -95,10 +95,8 @@ SERVER_VISIBLE_SCOPE_PREFIXES = (
     "你提到：",
     "已确认的品牌信息：",
     "已确认的商品信息：",
-    "下面是创作性的生活观察，不对应真实人物或经历：",
     "不妨试试：",
     "假设有这样一幕：",
-    "以下是情景演绎，不对应真实人物或经历：",
 )
 
 # Unicode Default_Ignorable_Code_Point as defined by DerivedCoreProperties.

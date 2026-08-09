@@ -62,7 +62,6 @@ CREATIVE_KERNEL_V5_VERSION = "creative-kernel-v5"
 _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS = frozenset({MEDIA_NATIVE_KERNEL_VERSION, KERNEL_VERSION})
 MAX_PRODUCT_FACT_BLOCKS = 3
 PRODUCT_VALUE_UNIT_ID = "unit:product-value"
-DRAMATIZATION_DISCLOSURE = "以下是情景演绎，不对应真实人物或经历："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
 OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
 OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM: KernelProgramId = "observation_with_hypothetical_example_v1"
@@ -1428,17 +1427,6 @@ def reconcile_kernel_observations(
                 NarrativeIssue(
                     unit.unit_id,
                     "unknown_constraint_ref",
-                    unit.text,
-                )
-            )
-        if observation.observation_type == "dramatization" and (
-            DRAMATIZATION_DISCLOSURE not in observation.dramatization_disclosure_spans
-            or not unit.text.startswith(DRAMATIZATION_DISCLOSURE)
-        ):
-            issues.append(
-                NarrativeIssue(
-                    unit.unit_id,
-                    "dramatization_not_visible",
                     unit.text,
                 )
             )

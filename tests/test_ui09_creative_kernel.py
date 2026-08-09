@@ -5,7 +5,6 @@ from dataclasses import replace
 import pytest
 
 from src.shared.creative_kernel import (
-    DRAMATIZATION_DISCLOSURE,
     CreativeKernelV1,
     build_kernel_skeleton,
     compiler_owned_unit_texts,
@@ -101,13 +100,12 @@ def _complete_observations(
             if unit.purpose == "body"
             else "abstract_principle"
         )
-        disclosure = (DRAMATIZATION_DISCLOSURE,) if observation_type == "dramatization" else ()
         observations.append(
             _observation(
                 unit_id=unit.unit_id,
                 text=unit.text,
                 observation_type=observation_type,
-                disclosure=disclosure,
+                disclosure=(),
                 event_spans=(body_event_spans if unit.purpose == "body" else ()),
             )
         )
@@ -313,13 +311,12 @@ def test_unfounded_institutional_assertion_fails() -> None:
     )
 
 
-def test_dramatization_requires_the_server_disclosure() -> None:
+def test_dramatization_is_audit_metadata_not_a_visible_disclosure() -> None:
     kernel = _kernel(
         mode="dramatization",
         body="甲说先停一下，乙把原本的话换了一种说法。",
     )
     assert kernel.unit("unit:body").mode == "disclosed_dramatization"
-    assert not kernel.unit("unit:body").text.startswith(DRAMATIZATION_DISCLOSURE)
     compiled = compile_delivery(
         DeliveryCompileInput(
             primary_product="brand_life_narrative",
@@ -330,7 +327,8 @@ def test_dramatization_requires_the_server_disclosure() -> None:
         ),
         kernel,
     )
-    assert DRAMATIZATION_DISCLOSURE.removesuffix("：") in compiled.body
+    assert "不对应真实人物或经历" not in compiled.body
+    assert "情景演绎" not in compiled.body
 
 
 def test_delivery_compiler_rejects_unreviewed_text_and_resources() -> None:

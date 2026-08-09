@@ -627,7 +627,7 @@ def test_formal_zero_model_vertical_uses_one_frozen_resolution_and_p1_basis() ->
     assert initial_snapshot["account_editorial_resolution_digest"] == (account_editorial_resolution_digest(resolution))
     assert completed_snapshot["publication_contract_digest"] == publication_contract_digest(contract)
     assert raw_writer["product_decision_basis"]["judgment_ref"] == basis.judgment_ref
-    assert raw_writer["brand_relevance"]["family"] == "product_expertise"
+    assert "brand_relevance" not in raw_writer
     assert assembly.brand_relevance_path == "product_expertise"
     visible = visible_context_basis(
         completed_snapshot,

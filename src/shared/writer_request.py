@@ -188,7 +188,10 @@ def build_writer_request_v3(
         expression_policy_version=contract.expression_policy_version,
         intake_role_contract_version=contract.intake_role_contract_version,
         account_editorial_context=_writer_account_editorial_context(contract),
-        brand_relevance=_writer_brand_relevance(contract),
+        # Brand relevance is frozen for audit and downstream eligibility only.
+        # It is deliberately absent from new Writer requests so an applied or
+        # degraded path can never pressure the copy toward a brand/product turn.
+        brand_relevance=None,
     )
     assert_writer_request_v3(request)
     return request

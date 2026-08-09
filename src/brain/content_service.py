@@ -59,6 +59,7 @@ from src.shared.content_snapshot import (
     frozen_user_premise,
     frozen_writer_output,
 )
+from src.shared.content_territory import missing_mission_evidence_question
 from src.shared.creative_kernel import CreativeKernel
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
@@ -594,6 +595,8 @@ class ContentService:
         )
         if not isinstance(context.context_packet, BrandContextPacketV3):
             raise DomainError("当前品牌还没有可供新任务使用的已确认发布版本。")
+        if mission_evidence_question := missing_mission_evidence_question(context, primary_product, products):
+            return {"kind": "question", "message": mission_evidence_question}
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
