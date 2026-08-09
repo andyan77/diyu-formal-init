@@ -1,0 +1,1353 @@
+{
+  "adjudications": [
+    {
+      "adjudication_id": "ADJ-BLIND-ORACLE-01",
+      "card_id": "B02",
+      "effect": "explicit unknown disclosure moved from machine gate to human scoring",
+      "original_output_reused": true
+    }
+  ],
+  "candidate_sha": "65995f3ba6ba99f79941395ab5042f671d2bc2e7",
+  "cards": [
+    {
+      "account_code": "H01",
+      "body_sha256": "059f6c2666992de3a8d07d884ecbaae33533ae0167985d523dc42e18e96339eb",
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "B01",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-01-BASIS",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-01-CONDITIONAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-01-NO-TEMP-RATING",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "dressing_decision",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "孩子周末要从室内游乐场直接去户外公园，怎么选外套？",
+      "logical_account_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "run_id": "afdf26e4-e8d4-4221-aa74-d503fb2ca037",
+      "target": "douyin_video",
+      "task_id": "6b8716c3-3820-4ae3-96cf-a53db6b3c647",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "18815dff-03eb-4332-86ef-67ad623b70dc"
+    },
+    {
+      "account_code": "H03",
+      "body_sha256": "0e9a389b427f490a59ba706fd76a9f0c0c45fb613ca4e3190a5a4d27687f032e",
+      "brand_relevance_family": "product_expertise",
+      "card_id": "B02",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-02-V-ONLY",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-02-LITERALS",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-02-UNKNOWN-DISCLOSED",
+          "result": "DEFERRED_TO_HUMAN"
+        }
+      ],
+      "content_product": "product_truth",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "把 DIYU-CSPU-006 讲清楚，只说确认过的。",
+      "logical_account_id": "d4b581c6-da52-5e5b-a933-4306c02ef57a",
+      "machine_result": "PASS",
+      "manual_review_flags": [
+        "explicit_unknown_disclosure"
+      ],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "d4b581c6-da52-5e5b-a933-4306c02ef57a",
+      "run_id": "48b5b77b-bcad-4ad0-bebe-fda092ea5e6c",
+      "target": "douyin_video",
+      "task_id": "b84d2acb-b9d6-47e8-b559-a2a1939e2f1b",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "c5986c80-5d30-4f74-8e1c-786fe7c823da"
+    },
+    {
+      "account_code": "H02",
+      "body_sha256": "129ed7c53557ba256f7d72e8af05d6c0e5746923c3b69319485ec563b64d4103",
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "B03",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-03-TOPIC-FIDELITY",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "brand_life_narrative",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "最近总想把没做完的事清零，聊聊你的取舍方法。",
+      "logical_account_id": "bb37314f-7605-5dc3-90d3-20e7d0d1ebee",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "375643a8-25fe-50a2-bf35-eb0de3b68cfb",
+      "run_id": "42be9e3a-bfb3-4867-bfdd-13079423f863",
+      "target": "xiaohongshu_graphic",
+      "task_id": "38f81685-407a-4581-9048-37c0ec13acbc",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "dbd26dd0-19bd-497b-9272-5db64b37ec20"
+    },
+    {
+      "account_code": "H04",
+      "body_sha256": "ad554237e96a6b8ce7df856c3ba75f868c51ed1c9890c778270744e6ff6d3e0a",
+      "brand_relevance_family": "product_expertise",
+      "card_id": "B04",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-04-QC-SOURCE",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "product_truth",
+      "failed_check": "S-04-QC-SOURCE",
+      "failed_observed": {
+        "demo_refs": [],
+        "stages": []
+      },
+      "input": "出厂之前你们都检查什么？以 DIYU-CSPU-013 为例。",
+      "logical_account_id": "5febf98c-63e4-5e60-b89b-0e0565ea0d89",
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "5febf98c-63e4-5e60-b89b-0e0565ea0d89",
+      "run_id": "7b6f35a7-8d5f-44b2-9931-8dfa9762ad8f",
+      "target": "douyin_video",
+      "task_id": "e3fe535f-5d8f-46cf-9afb-ba4bed3458f8",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "4b3722e6-e6e3-42c4-863d-1407974556af"
+    },
+    {
+      "account_code": "R01",
+      "body_sha256": "e1df351ce51c792f065197f72bfdad1ac2200c3a98e96b938bb2a2de66e5cc50",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B05",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-05-SCOPE",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "local_response",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "江浙这周忽冷忽热，通勤怎么穿？",
+      "logical_account_id": "4abc300b-8a7f-5227-aac3-0c8bb299a52d",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "4abc300b-8a7f-5227-aac3-0c8bb299a52d",
+      "run_id": "2e3ba311-f79c-4775-bc06-f43e73c7f69a",
+      "target": "douyin_video",
+      "task_id": "09a58056-4b02-48f5-be4a-73f60b266e18",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "3ad7b5a0-3ea6-4005-b059-bbee4d27a983"
+    },
+    {
+      "account_code": "R02",
+      "body_sha256": "3d5a09b95bcace1b58e8fc62e17c54fec1a6952218e6dd98288804686c095fcb",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B06",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-06-SCOPE",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "local_response",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "四川这边小孩儿开学，早晚凉中午热，咋个搭？",
+      "logical_account_id": "e9896afd-03d4-5322-a2e3-b27796a0568f",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "e9896afd-03d4-5322-a2e3-b27796a0568f",
+      "run_id": "6a1094f8-804c-41ba-ae51-94728cf5e43e",
+      "target": "douyin_video",
+      "task_id": "7033c224-6956-4044-8e52-5dac167cf132",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "4f9867f2-b537-436a-bdd8-30238e4ee9aa"
+    },
+    {
+      "account_code": "S01",
+      "body_sha256": "93355263501b1f0c9d0297c2c470323689703ac71299cc6b45c0a18b51984c1d",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B07",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-07-SCOPE",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "local_response",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "西湖店最近有什么值得来看的？",
+      "logical_account_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "run_id": "9183a2bd-9495-447c-b5a3-dad62557c547",
+      "target": "douyin_video",
+      "task_id": "7e1b9ac3-acb3-48d5-825b-5f0bf7b281d9",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "9792a451-3317-4553-9479-dc79a8dd9735"
+    },
+    {
+      "account_code": "S02",
+      "body_sha256": "b96ffb3c8576c1b713ede55668d3b17bc606c4f796635835d1eb0d9cbc22b5ca",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B08",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-08-PERSONA",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-08-QUESTION-SOURCE",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "local_response",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "试衣间里家长最常问什么？挑一个真实问题聊聊。",
+      "logical_account_id": "503be51d-3797-5626-a3ab-0fe6e14a836e",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "503be51d-3797-5626-a3ab-0fe6e14a836e",
+      "run_id": "6bf276f8-36e9-4eac-9ed4-30f72f8a46f1",
+      "target": "douyin_video",
+      "task_id": "32d2e47f-1627-4302-b7a2-0543bf3cbf99",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "4dd10eae-5830-4b07-b259-9256c95271f8"
+    },
+    {
+      "account_code": "S03",
+      "body_sha256": "8a71e1685333b2d6ee442b5eef493fa6e24ca30435c6d8c49e80722ecede6273",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B09",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-09-SCOPE",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-09-ORG",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "local_response",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "吴兴街坊都在准备换季，说说街坊们的穿衣事。",
+      "logical_account_id": "5c2bf28f-380f-5ac1-a978-37e182bcc058",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HuZ-01",
+        "SK-HuZ-02",
+        "SK-HuZ-03",
+        "SK-HuZ-04"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "5c2bf28f-380f-5ac1-a978-37e182bcc058",
+      "run_id": "087d6474-92fd-4608-b4d1-3f577005b593",
+      "target": "douyin_video",
+      "task_id": "f8a28c1e-cdd9-4ace-a5cc-1d8adb10b8c8",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "bcdd47e9-77e5-471b-8d01-9c2695ff017a"
+    },
+    {
+      "account_code": "S04",
+      "body_sha256": "79bd7634890adccc4d9f61234ac423199be4de2fa8fe9ec3dab14dd8ad66c5dd",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B10",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-10-PERSONA",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "brand_life_narrative",
+      "failed_check": "S-10-PERSONA",
+      "failed_observed": [],
+      "input": "阿野，说说你在店里最近一次印象深的事。",
+      "logical_account_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06",
+        "SK-CD-01",
+        "SK-CD-04"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "28dba4cd-378b-5073-b96b-25ea082a578d",
+      "run_id": "2cc37d9a-e095-40b1-8b45-12ab9e951089",
+      "target": "xiaohongshu_graphic",
+      "task_id": "79d19bc9-3ef4-4f7c-aefc-97e5ebeef695",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "f21da671-3d03-4b46-a99a-934d62eb665f"
+    },
+    {
+      "account_code": "H01",
+      "body_sha256": "de68c7b3742c4127df00edf8eff771fc49a8ad0ae62b2a38bcd2c6371ce3c6df",
+      "brand_relevance_family": null,
+      "card_id": "B11",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "visual_styling_story",
+      "failed_check": "G-CHAIN",
+      "failed_observed": "question",
+      "input": "用现有素材做一条灰色开衫的造型灵感短片脚本。",
+      "logical_account_id": null,
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 0,
+      "publishing_identity_id": null,
+      "run_id": null,
+      "target": "douyin_video",
+      "task_id": "",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": ""
+    },
+    {
+      "account_code": "H03",
+      "body_sha256": "b109216a72900f8e07afab31a5d90cbbd2056f19e060c8d0881ec02ca8977bfd",
+      "brand_relevance_family": null,
+      "card_id": "B12",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "product_truth",
+      "failed_check": "G-CHAIN",
+      "failed_observed": "question",
+      "input": "有人说这件开衫是棉的，到底是什么成分？",
+      "logical_account_id": null,
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 0,
+      "publishing_identity_id": null,
+      "run_id": null,
+      "target": "xiaohongshu_graphic",
+      "task_id": "",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": ""
+    },
+    {
+      "account_code": "H01",
+      "body_sha256": "7a5f9b0f2157a50a8d3a204935eb8a4e99e8231947157cb427d4ab3d45145050",
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "B13",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "brand_life_narrative",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "下雨天全家被困在家里，反而过得很开心。",
+      "logical_account_id": "e7dbe64d-49a1-507d-99b8-d588a43914eb",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "3f1896c3-86cb-5925-b6ce-3580cf4e200d",
+      "run_id": "6d537ac4-4723-405a-bbb7-2a1489e4bf99",
+      "target": "xiaohongshu_graphic",
+      "task_id": "cd2d5361-1a28-4a20-975e-1d23331ad657",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "674a8f9e-ecec-4c00-9eb7-ba1063bbe50f"
+    },
+    {
+      "account_code": "S04",
+      "body_sha256": "d205e688d28ecb79792dd94ca40f96d1b28b6bd9a34cfb6054152be9b3b7e289",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B14",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-13-14-PAIR-PRESENT",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-13-14-CONSISTENT",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-13-14-LENS-DIFFERENCE",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-14-NO-UNAUTHORIZED-BIO",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "brand_life_narrative",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "下雨天全家被困在家里，反而过得很开心。",
+      "logical_account_id": "52c7932e-300a-5e51-a27c-c643ce13beb0",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-SW-01",
+        "RK-SW-02",
+        "RK-SW-05",
+        "RK-SW-06",
+        "SK-CD-01",
+        "SK-CD-04"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "28dba4cd-378b-5073-b96b-25ea082a578d",
+      "run_id": "ff38f122-cf80-448d-afdb-5e9757c68514",
+      "target": "xiaohongshu_graphic",
+      "task_id": "50227e9f-c1de-4bc7-802d-2eb61c52def4",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "c66bec20-4c3b-46ed-a292-4f3132e04143"
+    },
+    {
+      "account_code": "S01",
+      "body_sha256": "b59e1a1b84fafdbcd9c1902f8254f0f39a577aa55788ed245f0dca093867026e",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B15",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-15-CROSS-STORE",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "dressing_decision",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "我在你们成都店看到一款外套，杭州这边怎么选同款？",
+      "logical_account_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "c95f18ff-a33e-5b2a-bb8c-5c044dafd09d",
+      "run_id": "18b67b23-cf5a-4509-a50a-ddbe2d27d5cd",
+      "target": "douyin_video",
+      "task_id": "d0d0e2ed-e054-413c-a0c5-b2150e00c4fe",
+      "transport_retries": 1,
+      "used_persona_quote_ids": [],
+      "version_id": "c7842765-a6ce-44f4-96b9-20ebbe1102cf"
+    },
+    {
+      "account_code": "H03",
+      "body_sha256": "b109216a72900f8e07afab31a5d90cbbd2056f19e060c8d0881ec02ca8977bfd",
+      "brand_relevance_family": null,
+      "card_id": "B16",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "product_truth",
+      "failed_check": "G-CHAIN",
+      "failed_observed": "question",
+      "input": "CSPU-008 的成分口径最近更新过吗？按最新的说。",
+      "logical_account_id": null,
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 0,
+      "publishing_identity_id": null,
+      "run_id": null,
+      "target": "xiaohongshu_graphic",
+      "task_id": "",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": ""
+    },
+    {
+      "account_code": "R01",
+      "body_sha256": "a0810db8a40364878da47371783e5b87478d8473af83de911763e8044c9d4d6f",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B17",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-17-SCOPE",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-17-CONDITIONAL",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "dressing_decision",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "给江浙家长一份本周穿衣日历式建议。",
+      "logical_account_id": "4abc300b-8a7f-5227-aac3-0c8bb299a52d",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "8902f3d2-9fef-5a14-bfb3-11d68e68a47f",
+      "run_id": "4d6955ba-4887-4212-ac06-c12d74724a15",
+      "target": "xiaohongshu_graphic",
+      "task_id": "9160a3f1-6e9f-41e5-b56c-c34ef90ee193",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "2db19583-b085-4f4f-93e2-ee64d249f2ae"
+    },
+    {
+      "account_code": "S02",
+      "body_sha256": "f908bfe9edef1b827c2da3c8405ed78eaf8b46e61baf97d72e8c50f2b0941b1d",
+      "brand_relevance_family": "local_trust",
+      "card_id": "B18",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-18-OBSERVATION-ONLY",
+          "result": "PASS"
+        }
+      ],
+      "content_product": "local_response",
+      "failed_check": null,
+      "failed_observed": null,
+      "input": "有顾客反馈上次推荐的搭配不好穿，怎么回应？",
+      "logical_account_id": "503be51d-3797-5626-a3ab-0fe6e14a836e",
+      "machine_result": "PASS",
+      "manual_review_flags": [],
+      "projection_claim_keys": [
+        "RK-EC-01",
+        "RK-EC-02",
+        "RK-EC-03",
+        "RK-EC-06",
+        "RK-EC-07",
+        "SK-HZ-01",
+        "SK-HZ-02",
+        "SK-HZ-03",
+        "SK-HZ-04",
+        "SK-HZ-06"
+      ],
+      "provider_requests": 1,
+      "publishing_identity_id": "799ea1a6-83a1-50e6-960b-9b5b26715fa9",
+      "run_id": "2a8ad05c-e90f-4477-b476-e3561c393662",
+      "target": "xiaohongshu_graphic",
+      "task_id": "56576401-e1ab-4809-be7f-5b4002a4a2ee",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "1f20e526-91ad-45e8-b11c-163a1583ee73"
+    },
+    {
+      "account_code": "H04",
+      "body_sha256": "48535ac6d61c221db240bdba894bae84e043f0f73b166440b579cb7265683e45",
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "B19",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-19-BRAND-STANCE",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "brand_life_narrative",
+      "failed_check": "S-19-BRAND-STANCE",
+      "failed_observed": {
+        "family": "audience_relationship",
+        "source_object_type": "account_profile"
+      },
+      "input": "为什么你们坚持不说没被证实的效果？聊聊这个原则。",
+      "logical_account_id": "5febf98c-63e4-5e60-b89b-0e0565ea0d89",
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "a36608a8-b07c-5d15-a607-5d3019fcfdbf",
+      "run_id": "2449c92d-4c1b-46fb-96d1-272088a75493",
+      "target": "xiaohongshu_graphic",
+      "task_id": "f7a4050a-8393-4927-bbf2-5090593f8614",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "d6e60fd5-1a15-488d-8cab-dfc086a9d4b1"
+    },
+    {
+      "account_code": "H02",
+      "body_sha256": "1d427b2f69f94a9e3e61997539b970fdcfaaab8f6d0f55f98a202848492f2192",
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "B20",
+      "checks": [
+        {
+          "check_id": "G-CHAIN",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-A-LOCAL",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-B",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-C",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-D",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-E",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-F",
+          "result": "PASS"
+        },
+        {
+          "check_id": "G-G",
+          "result": "PASS"
+        },
+        {
+          "check_id": "S-20-EXISTING-SERIES",
+          "result": "FAIL"
+        }
+      ],
+      "content_product": "brand_life_narrative",
+      "failed_check": "S-20-EXISTING-SERIES",
+      "failed_observed": {
+        "family": "audience_relationship",
+        "refs": [
+          "account-profile:8ccdffdf-becc-507d-9c84-08188069f27d:v1",
+          "publication-projection:ac0151ec-f0e6-5340-b9be-5b9263a0159b:v2"
+        ],
+        "series_context": null
+      },
+      "input": "继续你的『取舍笔记』系列，接着上一篇往下讲。",
+      "logical_account_id": "bb37314f-7605-5dc3-90d3-20e7d0d1ebee",
+      "machine_result": "FAIL",
+      "manual_review_flags": [],
+      "projection_claim_keys": [],
+      "provider_requests": 1,
+      "publishing_identity_id": "375643a8-25fe-50a2-bf35-eb0de3b68cfb",
+      "run_id": "cdd2908f-6cc6-4da0-9582-986ac0545c5c",
+      "target": "xiaohongshu_graphic",
+      "task_id": "d3c7037f-b4d7-45f4-874b-d8031bd3fcb0",
+      "transport_retries": 0,
+      "used_persona_quote_ids": [],
+      "version_id": "7553612a-1125-42ed-8cfa-a12f46fae598"
+    }
+  ],
+  "cumulative_provider_requests": 76,
+  "gatee_provider_requests": 17,
+  "machine_fail_count": 7,
+  "machine_hard_pass_count": 13,
+  "manual_review_pending": true,
+  "private_full_evidence": "/home/faye/diyu-evidence-brand-matrix-gatee-65995f3ba6ba99f79941395ab5042f671d2bc2e7/",
+  "provider_request_indexes": [
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76
+  ],
+  "status": "COMPLETE_AWAITING_CENTRAL_REVIEW",
+  "transport_retries": 1,
+  "zero_provider_cards": [
+    "B11",
+    "B12",
+    "B16"
+  ]
+}
