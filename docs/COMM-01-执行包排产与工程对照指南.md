@@ -1596,3 +1596,13 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
   按纪律 PRECONDITION_BLOCKED 后经授权切换，机制修复与主机无关，结论不受影响。
 - 下一动作：founder 逐篇审阅（审阅文档由监理生成送达）；PASS 后 Gate D 置 COMPLETE，
   签发 Prompt 6（Gate E · 密封盲测与生产收束）。
+
+### Gate D COMPLETE 落款（2026-08-09，founder 逐篇审阅收关）
+
+- founder 审阅裁决原话：「整体PASS」（15/15 成品，无例外篇目）。9 条非阻断标注随整体
+  PASS 一并接受——含监理标 ⚠️ 的「灰色主色低调百搭」肯定式软性断言（founder 未提出
+  改写要求，登记为可接受的消费者化表达先例，后续同类按此口径）。
+- **`GATE-D COMPLETE · PASS`**（监理落款）。BRAND-MATRIX-01 进度：S0、Gate A、B、C
+  （MECHANISM）、D 全部 COMPLETE；剩 Gate E（密封盲测与生产收束）+ 主控终审。
+- 下一动作：监理先行制作密封盲测包（20 卡+评分表，加密托管、口令仅主控），随后签发
+  Prompt 6（Gate E）。模型预算已用 59/300（Gate D 59，E 余量 241，硬上限不变）。
