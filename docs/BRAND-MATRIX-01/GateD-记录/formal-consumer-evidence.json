@@ -2,32 +2,37 @@
   "authorization_consumption": {
     "authorization_fixtures": [
       {
-        "authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
+        "authorization_id": "01ec9efb-7215-5973-8836-a31521fa654e",
         "event_counts": {
           "consumed": 1,
           "released": 1,
           "reserved": 2
         },
         "failed_run_released": true,
+        "fixture_scope": "DEMO-TEST",
         "independent_task_rejected": true,
+        "occupies_persona_quote_library": false,
         "same_lineage_v2_without_second_consumption": true,
-        "subject_ref": "PS-S02-05",
+        "subject_ref": "DEMO-TEST-QUOTE-S02-01",
         "v1_consumed_once": true
       },
       {
-        "authorization_id": "89b29389-0e77-518f-b9d3-959a4f60fb9d",
+        "authorization_id": "07fc129d-cf5c-5a4e-aa62-368fd23693b5",
         "event_counts": {
           "consumed": 1,
           "released": 1,
           "reserved": 2
         },
         "failed_run_released": true,
+        "fixture_scope": "DEMO-TEST",
         "independent_task_rejected": true,
+        "occupies_persona_quote_library": false,
         "same_lineage_v2_without_second_consumption": true,
-        "subject_ref": "PS-S04-03",
+        "subject_ref": "DEMO-TEST-QUOTE-S04-01",
         "v1_consumed_once": true
       }
-    ]
+    ],
+    "formal_persona_authorization_events": 0
   },
   "judgment_consumption": {
     "judgments": [
@@ -75,9 +80,9 @@
           "534668a0-b43f-5f48-af5e-d223a7de1aaf"
         ],
         "provider_requests": 0,
-        "run_id": "b8567d35-2233-47a5-b35e-f1a6476a8963",
+        "run_id": "6303fa05-a90b-4a24-8369-3c1e7ff9c6c2",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "1379eeba-caef-4e14-92b8-ac7bf1b7976d"
+        "task_id": "9644a645-a4fa-417b-bb62-361ea712e78b"
       },
       {
         "account_code": "R01",
@@ -100,9 +105,9 @@
           "f457e73b-0016-5f90-b89b-ebe0fccef8d8"
         ],
         "provider_requests": 0,
-        "run_id": "0f307508-484b-4ce6-89f6-7bc2166c87f2",
+        "run_id": "ad7a0740-d165-47e2-8472-c14f6eac24fc",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "1d179744-7d0f-4e60-90e3-c9f6ae4ccdf9"
+        "task_id": "bf5185cd-84e8-49ed-97e3-6b46c547c432"
       },
       {
         "account_code": "R02",
@@ -123,9 +128,9 @@
           "b616eb71-55fd-5ff3-8948-67d8908f7efe"
         ],
         "provider_requests": 0,
-        "run_id": "759fd6ef-d2e3-44d1-936e-1189ff7b74cb",
+        "run_id": "7b456332-5fc8-40f4-b5de-5c6b0d121d9f",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "55837d7e-35c3-4877-87b2-3fdf10398f5f"
+        "task_id": "bd3b4210-c358-4182-9ff5-d704d4e7358d"
       },
       {
         "account_code": "S01",
@@ -158,9 +163,9 @@
           "babc57eb-2e05-5566-95e4-a61311cd9420"
         ],
         "provider_requests": 0,
-        "run_id": "a6c6808b-67a9-444b-a646-b8e0c3c830ed",
+        "run_id": "71b640ef-7b9d-4541-a6b2-f88c720dcace",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "57f4e349-3e09-4a98-bcb3-ea86c8e7ba5c"
+        "task_id": "46808d94-4789-4cce-8a60-7d6102274642"
       },
       {
         "account_code": "S02",
@@ -194,9 +199,9 @@
           "f170810e-742d-51d7-8448-ffcd69da0d4c"
         ],
         "provider_requests": 0,
-        "run_id": "e0f9e745-0569-484c-9b1b-c8838c397de2",
+        "run_id": "c695206d-9f1e-4d22-95f8-05c0b1c5bc38",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "46e75f81-2c59-4b4d-94fa-c9421e0780bd"
+        "task_id": "7aefca7a-ad31-4fb5-a146-90965fa9ab02"
       },
       {
         "account_code": "S03",
@@ -227,9 +232,9 @@
           "a9ca8144-8be8-5f14-b6bd-67bdfe114532"
         ],
         "provider_requests": 0,
-        "run_id": "db54a164-3c30-493a-af53-3cdfb4d82b21",
+        "run_id": "48e80de7-fbbd-4fb9-8969-dc392b6e1cae",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "232ce447-6f55-439d-9b6f-2e33154d5706"
+        "task_id": "b4596ac0-892f-4857-bb17-fb8c0f0f7c1c"
       },
       {
         "account_code": "S04",
@@ -255,9 +260,9 @@
           "26162a89-44fe-5b48-8248-4b8beba06192"
         ],
         "provider_requests": 0,
-        "run_id": "52d4647b-b895-48e0-b3a1-9958fa584269",
+        "run_id": "8518f66e-58ef-48f0-a348-3b34deaef75d",
         "run_status": "failed_after_snapshot_proof",
-        "task_id": "dcf4c2f1-d12f-49f9-a302-b8f9cb48fd1b"
+        "task_id": "05da9e75-48a8-4fa6-a3f2-db4506302bad"
       }
     ],
     "hangzhou_positive": true,

@@ -38,8 +38,8 @@
     },
     {
       "id": "ANOM-07",
-      "name": "私人经历单次授权",
-      "oracle": "两条授权均满足失败释放、V1 消耗一次、同谱系 V2 不重复消耗、另一独立任务拒绝。",
+      "name": "DEMO-TEST 合成单次授权",
+      "oracle": "两条专用 DEMO-TEST 授权均满足失败释放、V1 消耗一次、同谱系 V2 不重复消耗、另一独立任务拒绝；不消费 PS-S02/PS-S04 业务授权。",
       "provider_policy": "pre_provider_deterministic"
     },
     {
@@ -189,7 +189,9 @@
     "maximum_provider_requests": 80,
     "maximum_transport_retries": 0,
     "model_source": "DEEPSEEK_MODEL exact env key",
-    "prior_provider_requests": 10,
+    "authorization_policy": "AMD-AUTH-20260809-01-REPEATABLE-BUSINESS-AND-DEMO-TEST-SINGLE-USE",
+    "orchestration_isolation": "deterministic_preflight_consumes_fixture_only",
+    "prior_provider_requests": 21,
     "provider_request_policy": "one accepted Writer response per card; deterministic anomalies fail before provider",
     "temperature": 0,
     "writer_assertion_policy": "ADJ-WRITER-BOUNDARY-04-EXACT-ABSOLUTE"
@@ -200,5 +202,5 @@
     "content_products": 5,
     "scenarios": 8
   },
-  "suite_version": "brand-matrix-gate-d-formal-suite-v5"
+  "suite_version": "brand-matrix-gate-d-formal-suite-v6"
 }

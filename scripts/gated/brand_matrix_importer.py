@@ -19,9 +19,12 @@ from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.publication_scope import publication_projection_v2_digest, qualification_digest
 from src.shared.types import TenantManagementScope
 
-GATE_D_CONTRACT_VERSION = "brand-matrix-gate-d-import-v1"
+GATE_D_CONTRACT_VERSION = "brand-matrix-gate-d-import-v2"
 EXPECTED_MANIFEST_SHA256 = "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06"
 FOUNDER_ATTESTATION_REF = "ATT-GATEA-20260808-01"
+AUTHORIZATION_AMENDMENT_ID = "AMD-AUTH-20260809-01"
+AUTHORIZATION_AMENDMENT_SHA256 = "e5c3ae916a1d3663c0a7df0a40a9b24094044417236d57c1550cec4d66d00291"
+AUTHORIZATION_AMENDMENT_COMMIT = "b107ee02ac39acd93dfb259b9f3e73d3f7318792"
 
 
 def matrix_id(label: str) -> UUID:
@@ -100,6 +103,21 @@ _PERSON_PUBLICATION_EXTRACTS = (
     ),
 )
 
+_SYNTHETIC_SINGLE_USE_AUTHORIZATIONS = (
+    (
+        "DEMO-TEST-QUOTE-S02-01",
+        "S02",
+        "DIYU-STORE-001",
+        "DEMO-TEST 单次授权失败释放与重复拒绝验证引语 A。",
+    ),
+    (
+        "DEMO-TEST-QUOTE-S04-01",
+        "S04",
+        "DIYU-STORE-003",
+        "DEMO-TEST 单次授权失败释放与重复拒绝验证引语 B。",
+    ),
+)
+
 
 @dataclass(frozen=True)
 class MatrixImportPlan:
@@ -109,6 +127,7 @@ class MatrixImportPlan:
     action: str
     counts: dict[str, int]
     source_sha256s: tuple[tuple[str, str], ...]
+    authorization_amendment_sha256: str
 
     def document(self) -> dict[str, object]:
         return {
@@ -120,6 +139,7 @@ class MatrixImportPlan:
             "source_sha256s": [
                 {"document_id": document_id, "sha256": digest} for document_id, digest in self.source_sha256s
             ],
+            "authorization_amendment_sha256": self.authorization_amendment_sha256,
         }
 
 
@@ -192,6 +212,13 @@ class BrandMatrixImporter:
         manifest = self._load_json(self._manifest_path)
         if contract["counts"] != manifest["counts"]:
             raise ValueError("Gate A contract and manifest counts differ")
+        amendment_path = (
+            self._repository_root
+            / "docs/BRAND-MATRIX-01/GateD-记录/授权修订单-AMD-AUTH-20260809-01.md"
+        )
+        amendment_sha256 = hashlib.sha256(amendment_path.read_bytes()).hexdigest()
+        if amendment_sha256 != AUTHORIZATION_AMENDMENT_SHA256:
+            raise ValueError("Gate D authorization amendment digest drifted")
         documents = self._documents(contract)
         source_sha256s = tuple((str(record["document_id"]), str(record["sha256"])) for record, _, _ in documents)
         counts = {str(key): int(value) for key, value in cast(dict[str, Any], contract["counts"]).items()}
@@ -200,6 +227,8 @@ class BrandMatrixImporter:
             "manifest_sha256": manifest_sha256,
             "counts": dict(sorted(counts.items())),
             "source_sha256s": source_sha256s,
+            "authorization_amendment_id": AUTHORIZATION_AMENDMENT_ID,
+            "authorization_amendment_sha256": amendment_sha256,
             "tenant_id": str(TENANT_ID),
             "brand_id": str(BRAND_ID),
         }
@@ -222,12 +251,15 @@ class BrandMatrixImporter:
             action=action,
             counts=counts,
             source_sha256s=source_sha256s,
+            authorization_amendment_sha256=amendment_sha256,
         )
 
     def apply(self, plan: MatrixImportPlan) -> dict[str, object]:
         fresh = self.dry_run()
         if fresh.batch_digest != plan.batch_digest or fresh.manifest_sha256 != plan.manifest_sha256:
             raise ValueError("import inputs changed after dry-run")
+        if fresh.authorization_amendment_sha256 != plan.authorization_amendment_sha256:
+            raise ValueError("authorization amendment changed after dry-run")
         if fresh.action == "no_op":
             return {
                 "status": "no_op",
@@ -276,6 +308,8 @@ class BrandMatrixImporter:
                             "manifest_sha256": plan.manifest_sha256,
                             "attestation_ref": FOUNDER_ATTESTATION_REF,
                             "amendment_id": "AMD-2026-0808-01",
+                            "authorization_amendment_id": AUTHORIZATION_AMENDMENT_ID,
+                            "authorization_amendment_sha256": plan.authorization_amendment_sha256,
                         }
                     ),
                 ),
@@ -297,11 +331,34 @@ class BrandMatrixImporter:
         current_items = current.get("items") if isinstance(current, dict) else None
         authorizations = governance.get("authorizations")
         qualifications = governance.get("qualifications")
+        authorization_items = (
+            cast(list[dict[str, object]], authorizations)
+            if isinstance(authorizations, list)
+            else []
+        )
         platform_target_count = 0
         for item in accounts:
             raw_targets = item.get("platform_targets")
             if isinstance(raw_targets, list):
                 platform_target_count += len(raw_targets)
+        with psycopg.connect(self._database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+            cursor.execute(
+                "SELECT metadata FROM activity_events WHERE tenant_id=%s "
+                "AND event_type='content_authorization.superseded' ORDER BY entity_id",
+                (TENANT_ID,),
+            )
+            supersede_chains = [dict(row[0]) for row in cursor.fetchall()]
+            cursor.execute(
+                "SELECT count(*) FROM brand_relevance_qualifications qualification "
+                "JOIN content_authorizations authz ON authz.tenant_id=qualification.tenant_id "
+                "AND authz.brand_id=qualification.brand_id AND authz.id=qualification.authorization_id "
+                "WHERE qualification.tenant_id=%s AND qualification.brand_id=%s "
+                "AND qualification.path_family='organization_people' "
+                "AND authz.authorization_version='v2' AND NOT authz.single_use",
+                (TENANT_ID, BRAND_ID),
+            )
+            qualification_row = cursor.fetchone()
         return {
             "logical_root_accounts": len(accounts),
             "platform_targets": platform_target_count,
@@ -309,7 +366,41 @@ class BrandMatrixImporter:
                 current.get("contract_version") if isinstance(current, dict) else None
             ),
             "projection_items": len(current_items) if isinstance(current_items, list) else 0,
-            "authorizations": len(authorizations) if isinstance(authorizations, list) else 0,
+            "authorizations": len(authorization_items),
+            "business_authorization_versions": {
+                subject_ref: sorted(
+                    str(item.get("authorization_version"))
+                    for item in authorization_items
+                    if item.get("subject_ref") == subject_ref
+                )
+                for subject_ref in ("PS-S02-05", "PS-S04-03")
+            },
+            "preserved_single_use_business_versions": sum(
+                1
+                for item in authorization_items
+                if item.get("subject_ref") in {"PS-S02-05", "PS-S04-03"}
+                and item.get("authorization_version") == "v1"
+                and item.get("single_use") is True
+            ),
+            "repeatable_business_authorizations": sum(
+                1
+                for item in authorization_items
+                if item.get("subject_ref") in {"PS-S02-05", "PS-S04-03"}
+                and item.get("authorization_version") == "v2"
+                and item.get("single_use") is False
+            ),
+            "synthetic_single_use_authorizations": sum(
+                1
+                for item in authorization_items
+                if str(item.get("subject_ref", "")).startswith("DEMO-TEST-QUOTE-")
+                and item.get("single_use") is True
+            ),
+            "authorization_supersede_events": len(supersede_chains),
+            "authorization_supersede_chains": supersede_chains,
+            "authorization_amendment_id": AUTHORIZATION_AMENDMENT_ID,
+            "current_repeatable_qualification_authorizations": (
+                int(qualification_row[0]) if qualification_row is not None else 0
+            ),
             "qualifications": len(qualifications) if isinstance(qualifications, list) else 0,
         }
 
@@ -885,11 +976,11 @@ class BrandMatrixImporter:
     ) -> dict[str, tuple[UUID, str, str]]:
         contracts: dict[str, tuple[UUID, str, str]] = {}
         for subject_ref, account_code, organization_code, allowed_text in _PERSON_PUBLICATION_EXTRACTS:
-            authorization_id = matrix_id(f"authorization:{subject_ref}")
             source_digest = hashlib.sha256(allowed_text.encode()).hexdigest()
-            document = {
+            prior_authorization_id = matrix_id(f"authorization:{subject_ref}")
+            prior_document = {
                 "contract_version": "content-authorization-v1",
-                "authorization_id": str(authorization_id),
+                "authorization_id": str(prior_authorization_id),
                 "authorization_version": "v1",
                 "subject_ref": subject_ref,
                 "tenant_id": str(TENANT_ID),
@@ -902,6 +993,35 @@ class BrandMatrixImporter:
                 "effective_at": "2026-08-08T00:00:00+00:00",
                 "expires_at": None,
             }
+            prior_digest = hashlib.sha256(
+                json.dumps(prior_document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            cursor.execute(
+                "INSERT INTO content_authorizations "
+                "(id,tenant_id,brand_id,logical_account_id,organization_id,subject_ref,authorization_version,"
+                "allowed_source_digest,allowed_usage,single_use,effective_at,expires_at,authorization_state,digest,recorded_by) "
+                "VALUES (%s,%s,%s,%s,%s,%s,'v1',%s,ARRAY['organization_people'],true,%s,NULL,'active',%s,%s)",
+                (
+                    prior_authorization_id,
+                    TENANT_ID,
+                    BRAND_ID,
+                    account_ids[account_code],
+                    organization_ids[organization_code],
+                    subject_ref,
+                    source_digest,
+                    datetime(2026, 8, 8, tzinfo=timezone.utc),
+                    prior_digest,
+                    ADMIN_USER_ID,
+                ),
+            )
+            authorization_id = matrix_id(f"authorization:{subject_ref}:v2")
+            document = {
+                **prior_document,
+                "authorization_id": str(authorization_id),
+                "authorization_version": "v2",
+                "single_use": False,
+                "effective_at": "2026-08-09T00:00:00+00:00",
+            }
             digest = hashlib.sha256(
                 json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest()
@@ -909,7 +1029,7 @@ class BrandMatrixImporter:
                 "INSERT INTO content_authorizations "
                 "(id,tenant_id,brand_id,logical_account_id,organization_id,subject_ref,authorization_version,"
                 "allowed_source_digest,allowed_usage,single_use,effective_at,expires_at,authorization_state,digest,recorded_by) "
-                "VALUES (%s,%s,%s,%s,%s,%s,'v1',%s,ARRAY['organization_people'],true,%s,NULL,'active',%s,%s)",
+                "VALUES (%s,%s,%s,%s,%s,%s,'v2',%s,ARRAY['organization_people'],false,%s,NULL,'active',%s,%s)",
                 (
                     authorization_id,
                     TENANT_ID,
@@ -918,12 +1038,74 @@ class BrandMatrixImporter:
                     organization_ids[organization_code],
                     subject_ref,
                     source_digest,
-                    datetime(2026, 8, 8, tzinfo=timezone.utc),
+                    datetime(2026, 8, 9, tzinfo=timezone.utc),
                     digest,
                     ADMIN_USER_ID,
                 ),
             )
+            cursor.execute(
+                "INSERT INTO activity_events "
+                "(id,tenant_id,actor_id,event_type,entity_type,entity_id,metadata) "
+                "VALUES (%s,%s,%s,'content_authorization.superseded','content_authorization',%s,%s)",
+                (
+                    matrix_id(f"event:authorization-superseded:{subject_ref}:v2"),
+                    TENANT_ID,
+                    ADMIN_USER_ID,
+                    authorization_id,
+                    Jsonb(
+                        {
+                            "amendment_id": AUTHORIZATION_AMENDMENT_ID,
+                            "amendment_commit": AUTHORIZATION_AMENDMENT_COMMIT,
+                            "prior_authorization_id": str(prior_authorization_id),
+                            "prior_authorization_version": "v1",
+                            "prior_digest": prior_digest,
+                            "authorization_id": str(authorization_id),
+                            "authorization_version": "v2",
+                            "digest": digest,
+                        }
+                    ),
+                ),
+            )
             contracts[subject_ref] = (authorization_id, digest, source_digest)
+        for subject_ref, account_code, organization_code, allowed_text in _SYNTHETIC_SINGLE_USE_AUTHORIZATIONS:
+            authorization_id = matrix_id(f"authorization:{subject_ref}")
+            source_digest = hashlib.sha256(allowed_text.encode()).hexdigest()
+            document = {
+                "contract_version": "content-authorization-v1",
+                "authorization_id": str(authorization_id),
+                "authorization_version": "fixture-v1",
+                "subject_ref": subject_ref,
+                "tenant_id": str(TENANT_ID),
+                "brand_id": str(BRAND_ID),
+                "logical_account_id": str(account_ids[account_code]),
+                "organization_id": str(organization_ids[organization_code]),
+                "allowed_source_digest": source_digest,
+                "allowed_usage": ["organization_people"],
+                "single_use": True,
+                "effective_at": "2026-08-09T00:00:00+00:00",
+                "expires_at": None,
+            }
+            digest = hashlib.sha256(
+                json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            cursor.execute(
+                "INSERT INTO content_authorizations "
+                "(id,tenant_id,brand_id,logical_account_id,organization_id,subject_ref,authorization_version,"
+                "allowed_source_digest,allowed_usage,single_use,effective_at,expires_at,authorization_state,digest,recorded_by) "
+                "VALUES (%s,%s,%s,%s,%s,%s,'fixture-v1',%s,ARRAY['organization_people'],true,%s,NULL,'active',%s,%s)",
+                (
+                    authorization_id,
+                    TENANT_ID,
+                    BRAND_ID,
+                    account_ids[account_code],
+                    organization_ids[organization_code],
+                    subject_ref,
+                    source_digest,
+                    datetime(2026, 8, 9, tzinfo=timezone.utc),
+                    digest,
+                    ADMIN_USER_ID,
+                ),
+            )
         return contracts
 
     def _insert_publication_projection(
@@ -1234,6 +1416,14 @@ class BrandMatrixImporter:
             "products": "SELECT count(*) FROM brand_products WHERE tenant_id=%s AND brand_id=%s AND source_kind='gatea_verified_visual'",
             "series": "SELECT count(*) FROM content_series WHERE tenant_id=%s AND brand_id=%s AND business_data_kind='formal_business_data'",
             "authorizations": "SELECT count(*) FROM content_authorizations WHERE tenant_id=%s AND brand_id=%s",
+            "repeatable_business_authorizations": (
+                "SELECT count(*) FROM content_authorizations WHERE tenant_id=%s AND brand_id=%s "
+                "AND subject_ref IN ('PS-S02-05','PS-S04-03') AND authorization_version='v2' AND NOT single_use"
+            ),
+            "synthetic_single_use_authorizations": (
+                "SELECT count(*) FROM content_authorizations WHERE tenant_id=%s AND brand_id=%s "
+                "AND subject_ref LIKE 'DEMO-TEST-QUOTE-%%' AND single_use"
+            ),
             "qualifications": "SELECT count(*) FROM brand_relevance_qualifications WHERE tenant_id=%s AND brand_id=%s",
             "source_documents": "SELECT count(*) FROM brand_source_documents WHERE tenant_id=%s AND brand_id=%s",
             "projection_items": (

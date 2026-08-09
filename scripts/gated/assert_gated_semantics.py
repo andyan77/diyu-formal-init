@@ -22,7 +22,9 @@ _EXPECTED_INVENTORY = {
     "judgments": 4,
     "products": 4,
     "series": 2,
-    "authorizations": 2,
+    "authorizations": 6,
+    "repeatable_business_authorizations": 2,
+    "synthetic_single_use_authorizations": 2,
     "qualifications": 30,
     "projection_items": 34,
     "regional_store_projection_items": 28,
@@ -122,15 +124,40 @@ def _assert_import() -> tuple[str, str]:
                     f"Gate D semantics FAIL: inventory {key}={inventory.get(key)} expected={expected}"
                 )
         readback = cast(dict[str, Any], round_value.get("formal_readback"))
-        if readback != {
-            "authorizations": 2,
+        expected_readback = {
+            "authorization_amendment_id": "AMD-AUTH-20260809-01",
+            "authorization_supersede_events": 2,
+            "authorizations": 6,
+            "business_authorization_versions": {
+                "PS-S02-05": ["v1", "v2"],
+                "PS-S04-03": ["v1", "v2"],
+            },
             "logical_root_accounts": 10,
             "platform_targets": 40,
+            "preserved_single_use_business_versions": 2,
             "projection_contract_version": "brand-publication-projection-v2",
             "projection_items": 34,
             "qualifications": 30,
-        }:
-            raise SystemExit("Gate D semantics FAIL: formal importer readback differs")
+            "repeatable_business_authorizations": 2,
+            "synthetic_single_use_authorizations": 2,
+            "current_repeatable_qualification_authorizations": 2,
+        }
+        for key, expected_value in expected_readback.items():
+            if readback.get(key) != expected_value:
+                raise SystemExit(f"Gate D semantics FAIL: formal importer readback differs: {key}")
+        chains = cast(list[dict[str, Any]], readback.get("authorization_supersede_chains"))
+        if (
+            len(chains) != 2
+            or {chain.get("amendment_id") for chain in chains} != {"AMD-AUTH-20260809-01"}
+            or {chain.get("prior_authorization_version") for chain in chains} != {"v1"}
+            or {chain.get("authorization_version") for chain in chains} != {"v2"}
+            or any(
+                len(str(chain.get(key, ""))) != 64
+                for chain in chains
+                for key in ("prior_digest", "digest")
+            )
+        ):
+            raise SystemExit("Gate D semantics FAIL: authorization supersede digest chain differs")
     return str(first["batch_digest"]), str(first["object_fingerprint"])
 
 
@@ -167,7 +194,10 @@ def _assert_consumers() -> None:
         raise SystemExit("Gate D semantics FAIL: J evidence count differs")
     authorization = cast(dict[str, Any], evidence.get("authorization_consumption"))
     fixtures = cast(list[dict[str, Any]], authorization.get("authorization_fixtures"))
-    if {fixture.get("subject_ref") for fixture in fixtures} != {"PS-S02-05", "PS-S04-03"}:
+    if {fixture.get("subject_ref") for fixture in fixtures} != {
+        "DEMO-TEST-QUOTE-S02-01",
+        "DEMO-TEST-QUOTE-S04-01",
+    }:
         raise SystemExit("Gate D semantics FAIL: authorization fixtures differ")
     for fixture in fixtures:
         if not all(
@@ -180,6 +210,61 @@ def _assert_consumers() -> None:
             )
         ):
             raise SystemExit("Gate D semantics FAIL: authorization state-machine evidence failed")
+        if (
+            fixture.get("fixture_scope") != "DEMO-TEST"
+            or fixture.get("occupies_persona_quote_library") is not False
+        ):
+            raise SystemExit("Gate D semantics FAIL: authorization fixture isolation differs")
+    if authorization.get("formal_persona_authorization_events") != 0:
+        raise SystemExit("Gate D semantics FAIL: deterministic preflight consumed formal business authorization")
+
+
+def _assert_authorization_orchestration_isolation() -> None:
+    importer = _source("scripts/gated/brand_matrix_importer.py")
+    rehearsal = _source("scripts/gated/assert_rehearsal_semantics.py")
+    runner = _source("scripts/gated/run_formal_acceptance.py")
+    amendment = _source(
+        "docs/BRAND-MATRIX-01/GateD-记录/授权修订单-AMD-AUTH-20260809-01.md"
+    )
+    _require(
+        importer,
+        (
+            'AUTHORIZATION_AMENDMENT_ID = "AMD-AUTH-20260809-01"',
+            '"authorization_version": "v2"',
+            '"single_use": False',
+            "content_authorization.superseded",
+            '"DEMO-TEST-QUOTE-S02-01"',
+            '"DEMO-TEST-QUOTE-S04-01"',
+        ),
+        "authorization amendment import",
+    )
+    _require(
+        rehearsal,
+        (
+            '_SYNTHETIC_AUTHORIZATION_FIXTURES = (',
+            'if not subject_ref.startswith("DEMO-TEST-QUOTE-")',
+            '"formal_persona_authorization_events":',
+            "def assert_single_use_fixture_evidence(",
+        ),
+        "deterministic fixture isolation",
+    )
+    if "_assert_single_use_authorizations(" in runner:
+        raise SystemExit("Gate D semantics FAIL: formal suite mutates the preflight authorization fixtures")
+    _require(
+        runner,
+        ("assert_single_use_fixture_evidence", "read-only verification of the frozen DEMO-TEST"),
+        "formal anomaly 7 read-only proof",
+    )
+    _require(
+        amendment,
+        (
+            "APPROVED_FOR_GATE_D_IMPORT",
+            "single_use=false",
+            "append-only",
+            "DEMO-TEST",
+        ),
+        "authorization amendment record",
+    )
 
 
 def _assert_media() -> str:
@@ -291,7 +376,7 @@ def _assert_media() -> str:
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
     if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v5"
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v6"
         or contract.get("expected_counts")
         != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
     ):
@@ -300,10 +385,14 @@ def _assert_formal_suite_contract() -> None:
     if (
         constraints.get("maximum_provider_requests") != 80
         or constraints.get("maximum_transport_retries") != 0
-        or constraints.get("prior_provider_requests") != 10
+        or constraints.get("prior_provider_requests") != 21
         or constraints.get("temperature") != 0
         or constraints.get("writer_assertion_policy")
         != "ADJ-WRITER-BOUNDARY-04-EXACT-ABSOLUTE"
+        or constraints.get("authorization_policy")
+        != "AMD-AUTH-20260809-01-REPEATABLE-BUSINESS-AND-DEMO-TEST-SINGLE-USE"
+        or constraints.get("orchestration_isolation")
+        != "deterministic_preflight_consumes_fixture_only"
     ):
         raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
     cards = cast(list[dict[str, Any]], contract.get("cards"))
@@ -409,10 +498,11 @@ def _assert_formal_suite_contract() -> None:
         (
             '"writer_confirmed_product_fact_refs"',
             '"used_persona_quote_ids"',
+            "_VERSIONED_PERSONA_QUOTE_IDS",
             "_PUBLICATION_V3_LEGACY_COMPLETION_KEYS",
             "_validate_publication_v3_grounding",
             "Writer 确认商品事实引用超出冻结事实包",
-            "Writer 单次人设原句与冻结核销授权不一致",
+            "Writer 人设原句与冻结授权不一致",
         ),
         "publication-v3 completion grounding",
     )
@@ -424,6 +514,7 @@ def _assert_formal_suite_contract() -> None:
             "test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe",
             "test_gated_rerun03_completion_grounding_rejects_invalid_shapes",
             "test_gated_rerun03_single_use_quote_matches_frozen_authorization",
+            "test_gated_rerun05_repeatable_persona_quote_can_be_committed_again",
             "3bafbf45-fb92-45ae-b832-984ef425a5f8",
             "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
         ),
@@ -435,13 +526,15 @@ def main() -> None:
     _assert_d0()
     batch_digest, fingerprint = _assert_import()
     _assert_consumers()
+    _assert_authorization_orchestration_isolation()
     media_digest = _assert_media()
     _assert_formal_suite_contract()
     print(
         "GATED_SEMANTICS_OK "
         f"batch_digest={batch_digest} object_fingerprint={fingerprint} "
         f"media_digest={media_digest} roots=10 carriers=20 accounts=30 targets=40 "
-        "local_entries=31 J=4 authorizations=2 masters=26 pass=26 quarantined=0 "
+        "local_entries=31 J=4 authorizations=6 business_auth_v2_repeatable=2 demo_single_use=2 "
+        "masters=26 pass=26 quarantined=0 "
         "p5_eligible=6 distinct_p5_products=4 provider_requests_before_freeze=0 "
         "terminal=READY_FOR_RUNTIME_FREEZE"
     )

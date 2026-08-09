@@ -20,10 +20,10 @@ _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
 from scripts.gated.assert_rehearsal_semantics import (  # noqa: E402
-    _assert_single_use_authorizations,
     _context,
     _local_claims,
     _select,
+    assert_single_use_fixture_evidence,
 )
 from scripts.gated.brand_matrix_importer import (  # noqa: E402
     ADMIN_USER_ID,
@@ -67,12 +67,13 @@ from src.shared.types import (  # noqa: E402
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator  # noqa: E402
 
-SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v5"
+SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v6"
 MAX_PROVIDER_REQUESTS = 80
 INITIAL_RUNTIME_CANDIDATE_SHA = "997e6b55c1c40dacd44a46ff6617b28766011958"
 FIRST_RERUN_RUNTIME_CANDIDATE_SHA = "f7e8e81c80ebc8552794f82aab81ef509e242b14"
 SECOND_RERUN_RUNTIME_CANDIDATE_SHA = "ba4208a6ea96775683ecd89f41b6cd869b45eead"
-PRIOR_RUNTIME_CANDIDATE_SHA = "596b87e7e9d0551c6b62834137e03eed2bf52c82"
+THIRD_RERUN_RUNTIME_CANDIDATE_SHA = "596b87e7e9d0551c6b62834137e03eed2bf52c82"
+PRIOR_RUNTIME_CANDIDATE_SHA = "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9"
 _ENV_PATH = Path("/home") / "faye" / "workspace" / "diyu-formal-init" / ".env"
 _ACCOUNT_ORGANIZATIONS = {
     "H01": "DIYU-HQ-001",
@@ -314,7 +315,7 @@ def _load_prior_ledger(
     if (
         runtime_candidate_sha != PRIOR_RUNTIME_CANDIDATE_SHA
         or document.get("prior_runtime_candidate_sha")
-        != SECOND_RERUN_RUNTIME_CANDIDATE_SHA
+        != THIRD_RERUN_RUNTIME_CANDIDATE_SHA
         or document.get("initial_runtime_candidate_sha")
         != INITIAL_RUNTIME_CANDIDATE_SHA
         or document.get("runtime_candidate_chain")
@@ -322,11 +323,12 @@ def _load_prior_ledger(
             INITIAL_RUNTIME_CANDIDATE_SHA,
             FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
             SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
+            THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
             PRIOR_RUNTIME_CANDIDATE_SHA,
         ]
-        or document.get("prior_record_range") != [1, 8]
-        or document.get("prior_provider_request_count") != 8
-        or document.get("current_provider_request_count") != 2
+        or document.get("prior_record_range") != [1, 10]
+        or document.get("prior_provider_request_count") != 10
+        or document.get("current_provider_request_count") != 11
         or document.get("status") != "FAILED_SAFE"
         or document.get("provider_request_count") != expected_count
         or not isinstance(records, list)
@@ -338,19 +340,16 @@ def _load_prior_ledger(
     normalized: list[dict[str, Any]] = []
     for raw_record in cast(list[dict[str, Any]], records):
         request_index = int(raw_record["request_index"])
-        expected_candidate = (
-            INITIAL_RUNTIME_CANDIDATE_SHA
-            if request_index <= 6
-            else (
-                FIRST_RERUN_RUNTIME_CANDIDATE_SHA
-                if request_index == 7
-                else (
-                    SECOND_RERUN_RUNTIME_CANDIDATE_SHA
-                    if request_index == 8
-                    else PRIOR_RUNTIME_CANDIDATE_SHA
-                )
-            )
-        )
+        if request_index <= 6:
+            expected_candidate = INITIAL_RUNTIME_CANDIDATE_SHA
+        elif request_index == 7:
+            expected_candidate = FIRST_RERUN_RUNTIME_CANDIDATE_SHA
+        elif request_index == 8:
+            expected_candidate = SECOND_RERUN_RUNTIME_CANDIDATE_SHA
+        elif request_index <= 10:
+            expected_candidate = THIRD_RERUN_RUNTIME_CANDIDATE_SHA
+        else:
+            expected_candidate = PRIOR_RUNTIME_CANDIDATE_SHA
         recorded_candidate = str(
             raw_record.get("runtime_candidate_sha", expected_candidate)
         )
@@ -723,7 +722,7 @@ def _pre_provider_anomalies(database_url: str) -> tuple[dict[str, Any], dict[str
     results["ANOM-07"] = {
         "result": "PENDING_ZERO_PROVIDER_CHECK",
         "provider_requests": 0,
-        "evidence": "reserved for execution after scenario artifacts so its one-time fixtures cannot pre-consume them",
+        "evidence": "reserved for read-only verification of the frozen DEMO-TEST single-use fixtures",
     }
     results["ANOM-01"] = {
         "result": "PASS",
@@ -1055,10 +1054,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         anomaly_results["ANOM-07"] = {
             "result": "PASS",
             "provider_requests": 0,
-            "evidence": _assert_single_use_authorizations(
-                PostgresContentRepository(str(arguments.app_database_url)),
-                str(arguments.app_database_url),
-            ),
+            "evidence": assert_single_use_fixture_evidence(str(arguments.app_database_url)),
         }
         scenario_results = _scenario_assertions(
             artifacts,
@@ -1099,6 +1095,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 INITIAL_RUNTIME_CANDIDATE_SHA,
                 FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
                 SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
+                THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
                 PRIOR_RUNTIME_CANDIDATE_SHA,
                 candidate_sha,
             ],
@@ -1131,6 +1128,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 INITIAL_RUNTIME_CANDIDATE_SHA,
                 FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
                 SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
+                THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
                 PRIOR_RUNTIME_CANDIDATE_SHA,
                 candidate_sha,
             ],
@@ -1156,13 +1154,14 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         _write_public_json(
             cast(Path, arguments.public_ledger),
             {
-                "ledger_version": "brand-matrix-gate-d-provider-ledger-v5",
+                "ledger_version": "brand-matrix-gate-d-provider-ledger-v6",
                 "runtime_candidate_sha": candidate_sha,
                 "prior_runtime_candidate_sha": prior_candidate_sha,
                 "runtime_candidate_chain": [
                     INITIAL_RUNTIME_CANDIDATE_SHA,
                     FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
                     SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
+                    THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
                     PRIOR_RUNTIME_CANDIDATE_SHA,
                     candidate_sha,
                 ],

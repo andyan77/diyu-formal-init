@@ -119,6 +119,10 @@ _TABLE_QUERIES = {
         "SELECT id,actor_id,event_type,entity_type,entity_id,metadata FROM activity_events "
         "WHERE tenant_id=%s AND entity_id=%s AND event_type='brand_matrix.imported' ORDER BY id"
     ),
+    "authorization_supersede_events": (
+        "SELECT id,actor_id,event_type,entity_type,entity_id,metadata FROM activity_events "
+        "WHERE tenant_id=%s AND event_type='content_authorization.superseded' ORDER BY id"
+    ),
     "legacy_tasks": (
         "SELECT id,account_id,created_by,weak_seed,primary_content_product,product_refs,media_format,"
         "production_conditions,content_context_snapshot,logical_account_id,business_data_kind "

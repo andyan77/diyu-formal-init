@@ -81,6 +81,15 @@ _FROZEN_QUERIES = {
         "allowed_source_digest,allowed_usage,single_use,effective_at,expires_at,authorization_state,digest "
         "FROM content_authorizations WHERE tenant_id=%s AND brand_id=%s ORDER BY id"
     ),
+    "authorization_reservations": (
+        "SELECT authorization_id,task_id,run_id,task_lineage_id,status,actor_id,reservation_digest "
+        "FROM content_authorization_reservations WHERE tenant_id=%s AND brand_id=%s ORDER BY authorization_id"
+    ),
+    "authorization_events": (
+        "SELECT authorization_id,task_id,run_id,task_lineage_id,event_type,actor_id,event_digest "
+        "FROM content_authorization_events WHERE tenant_id=%s AND brand_id=%s "
+        "ORDER BY authorization_id,event_type,event_at"
+    ),
     "media_assets": (
         "SELECT id,owner_organization_id,status,media_type,object_key,byte_size,original_filename,"
         "checksum_sha256,reference_note,visibility_scope,current_version_id FROM material_assets "
@@ -155,7 +164,9 @@ def database_input_fingerprint(database_url: str) -> tuple[str, dict[str, int], 
         raise ValueError("runtime freeze requires exactly one confirmed publication projection")
     expected_counts = {
         "accounts": 39,
-        "authorizations": 2,
+        "authorization_events": 8,
+        "authorization_reservations": 2,
+        "authorizations": 6,
         "media_assets": 26,
         "media_bindings": 6,
         "media_versions": 26,

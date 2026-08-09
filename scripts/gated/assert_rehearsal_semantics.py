@@ -4,7 +4,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import cast
 from uuid import UUID
 
 import psycopg
@@ -29,10 +28,10 @@ from src.shared.product_value import (  # noqa: E402
 from src.shared.publication_scope import (  # noqa: E402
     AuthorizationContractV1,
     authorization_contract_document,
+    authorization_contract_from_document,
 )
 from src.shared.types import (  # noqa: E402
     BrandContext,
-    BrandRelevanceQualificationV1,
     TrustedScope,
 )
 
@@ -55,6 +54,11 @@ _ALLOWED_LOCAL_PREFIXES = {
     "S03": ("RK-EC-", "SK-HuZ-"),
     "S04": ("RK-SW-", "SK-CD-"),
 }
+_SYNTHETIC_AUTHORIZATION_FIXTURES = (
+    ("S02", "DEMO-TEST-QUOTE-S02-01"),
+    ("S04", "DEMO-TEST-QUOTE-S04-01"),
+)
+_FORMAL_PERSONA_QUOTE_IDS = ("PS-S02-05", "PS-S04-03")
 
 
 def _scope(account_code: str) -> TrustedScope:
@@ -247,15 +251,44 @@ def _assert_judgments(repository: PostgresContentRepository) -> dict[str, object
     return {"judgments": results, "p1_consumers": 4, "p2_consumers": 4}
 
 
-def _person_qualification(context: BrandContext) -> BrandRelevanceQualificationV1:
-    matches = tuple(
-        qualification
-        for qualification in context.relevance_qualifications
-        if qualification.path_family == "organization_people"
-    )
-    if len(matches) != 1 or matches[0].authorization is None:
-        raise AssertionError("person content did not resolve one formal authorization")
-    return matches[0]
+def _synthetic_authorization(
+    app_database_url: str,
+    *,
+    subject_ref: str,
+) -> AuthorizationContractV1:
+    if not subject_ref.startswith("DEMO-TEST-QUOTE-"):
+        raise AssertionError("deterministic authorization proof may only load DEMO-TEST fixtures")
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        cursor.execute(
+            "SELECT id,authorization_version,logical_account_id,organization_id,allowed_source_digest,"
+            "allowed_usage,single_use,effective_at,expires_at,digest FROM content_authorizations "
+            "WHERE tenant_id=%s AND brand_id=%s AND subject_ref=%s",
+            (TENANT_ID, BRAND_ID, subject_ref),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise AssertionError(f"synthetic authorization fixture is missing: {subject_ref}")
+    document = {
+        "contract_version": "content-authorization-v1",
+        "authorization_id": str(row[0]),
+        "authorization_version": str(row[1]),
+        "subject_ref": subject_ref,
+        "tenant_id": str(TENANT_ID),
+        "brand_id": str(BRAND_ID),
+        "logical_account_id": str(row[2]),
+        "organization_id": str(row[3]),
+        "allowed_source_digest": str(row[4]),
+        "allowed_usage": list(row[5]),
+        "single_use": bool(row[6]),
+        "effective_at": row[7].isoformat(),
+        "expires_at": row[8].isoformat() if row[8] is not None else None,
+        "digest": str(row[9]),
+    }
+    authorization = authorization_contract_from_document(document)
+    if authorization.authorization_version != "fixture-v1" or authorization.single_use is not True:
+        raise AssertionError("DEMO-TEST authorization is not the frozen single-use fixture")
+    return authorization
 
 
 def _authorization_snapshot(context: BrandContext, authorization: AuthorizationContractV1) -> dict[str, object]:
@@ -330,12 +363,9 @@ def _assert_single_use_authorizations(
     app_database_url: str,
 ) -> dict[str, object]:
     evidence: list[dict[str, object]] = []
-    for account_code, subject_ref in (("S02", "PS-S02-05"), ("S04", "PS-S04-03")):
+    for account_code, subject_ref in _SYNTHETIC_AUTHORIZATION_FIXTURES:
         context = _select(repository, account_code)
-        qualification = _person_qualification(context)
-        authorization = cast(AuthorizationContractV1, qualification.authorization)
-        if authorization.subject_ref != subject_ref:
-            raise AssertionError(f"{account_code} resolved the wrong person authorization")
+        authorization = _synthetic_authorization(app_database_url, subject_ref=subject_ref)
         snapshot = _authorization_snapshot(context, authorization)
 
         failed_task, failed_run = _create_run(repository, account_code, context, snapshot)
@@ -378,9 +408,79 @@ def _assert_single_use_authorizations(
                 "same_lineage_v2_without_second_consumption": True,
                 "independent_task_rejected": independent_rejected,
                 "event_counts": event_counts,
+                "fixture_scope": "DEMO-TEST",
+                "occupies_persona_quote_library": False,
             }
         )
-    return {"authorization_fixtures": evidence}
+    return {
+        "authorization_fixtures": evidence,
+        "formal_persona_authorization_events": _formal_persona_authorization_event_count(
+            app_database_url
+        ),
+    }
+
+
+def _formal_persona_authorization_event_count(app_database_url: str) -> int:
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        cursor.execute(
+            "SELECT count(*) FROM content_authorization_events event_record "
+            "JOIN content_authorizations authz "
+            "ON authz.tenant_id=event_record.tenant_id AND authz.id=event_record.authorization_id "
+            "WHERE event_record.tenant_id=%s AND event_record.brand_id=%s AND authz.subject_ref=ANY(%s)",
+            (TENANT_ID, BRAND_ID, list(_FORMAL_PERSONA_QUOTE_IDS)),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise AssertionError("formal persona authorization event count is unavailable")
+    return int(row[0])
+
+
+def assert_single_use_fixture_evidence(app_database_url: str) -> dict[str, object]:
+    """Read the frozen DEMO-TEST proof without mutating any authorization state."""
+
+    fixtures: list[dict[str, object]] = []
+    for _account_code, subject_ref in _SYNTHETIC_AUTHORIZATION_FIXTURES:
+        authorization = _synthetic_authorization(app_database_url, subject_ref=subject_ref)
+        with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+            cursor.execute(
+                "SELECT event_type,count(*) FROM content_authorization_events "
+                "WHERE tenant_id=%s AND brand_id=%s AND authorization_id=%s "
+                "GROUP BY event_type ORDER BY event_type",
+                (TENANT_ID, BRAND_ID, UUID(authorization.authorization_id)),
+            )
+            event_counts = {str(row[0]): int(row[1]) for row in cursor.fetchall()}
+            cursor.execute(
+                "SELECT status FROM content_authorization_reservations "
+                "WHERE tenant_id=%s AND brand_id=%s AND authorization_id=%s",
+                (TENANT_ID, BRAND_ID, UUID(authorization.authorization_id)),
+            )
+            reservation = cursor.fetchone()
+        if event_counts != {"consumed": 1, "released": 1, "reserved": 2}:
+            raise AssertionError(f"frozen DEMO-TEST events differ for {subject_ref}: {event_counts}")
+        if reservation is None or str(reservation[0]) != "consumed":
+            raise AssertionError(f"frozen DEMO-TEST reservation differs for {subject_ref}")
+        fixtures.append(
+            {
+                "subject_ref": subject_ref,
+                "authorization_id": authorization.authorization_id,
+                "failed_run_released": True,
+                "v1_consumed_once": True,
+                "same_lineage_v2_without_second_consumption": True,
+                "independent_task_rejected": True,
+                "event_counts": event_counts,
+                "fixture_scope": "DEMO-TEST",
+                "occupies_persona_quote_library": False,
+            }
+        )
+    if _formal_persona_authorization_event_count(app_database_url) != 0:
+        raise AssertionError("deterministic proof consumed a formal persona authorization")
+    return {
+        "authorization_fixtures": fixtures,
+        "formal_persona_authorization_events": 0,
+        "verification_mode": "read_only_after_preflight",
+    }
 
 
 def verify(app_database_url: str) -> dict[str, object]:

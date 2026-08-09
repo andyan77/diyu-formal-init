@@ -8,14 +8,15 @@
     "legacy_version_id": "432cc50a-240e-5b4a-88e1-dcc37b6b38df",
     "tenant_id": "3020d100-d206-5f02-aa49-8aefa442ce86"
   },
-  "prestate_snapshot_sha256": "fcd74afff82109046e715e72050ff00becd26c0a36410ce23060d45f92124bd5",
+  "prestate_snapshot_sha256": "b0a82aba39fa838a35b933e01611ffe20761553148b972e2c91928bc0690c8cb",
   "round_one": {
-    "batch_digest": "f15d0efe63173b1b6c72b5b4cf4681673cf29e4536fe600e3d92066e52781750",
+    "batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
     "counts": {
       "account_roles": 30,
       "accounts": 39,
       "auth_grants": 33,
-      "authorizations": 2,
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
       "import_audits": 1,
       "legacy_tasks": 1,
       "library_entries": 35,
@@ -35,12 +36,50 @@
       "users": 9
     },
     "formal_readback": {
-      "authorizations": 2,
+      "authorization_amendment_id": "AMD-AUTH-20260809-01",
+      "authorization_supersede_chains": [
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "5058cd90-e05b-5800-b311-d17bd62b8bea",
+          "authorization_version": "v2",
+          "digest": "d0b99d2f07ac48e51eff3309be777b0b05cddc7a22f6c910000c163ddb194900",
+          "prior_authorization_id": "89b29389-0e77-518f-b9d3-959a4f60fb9d",
+          "prior_authorization_version": "v1",
+          "prior_digest": "247a8ae5db07cd34c410ebd18f1fda1c1bad4d94b9ff7ad2248db92c90fc5c1e"
+        },
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "9f4a5a50-f462-53d0-8689-1f4413de4eea",
+          "authorization_version": "v2",
+          "digest": "4060c76d3faeedd89ce919d31f00fe49633a59bc3458dce3b53d985a82941ae6",
+          "prior_authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
+          "prior_authorization_version": "v1",
+          "prior_digest": "6400927f6262a1e1cb0c7d5f9b6da7af5450e2105066495f52bd8731acd332b4"
+        }
+      ],
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
+      "business_authorization_versions": {
+        "PS-S02-05": [
+          "v1",
+          "v2"
+        ],
+        "PS-S04-03": [
+          "v1",
+          "v2"
+        ]
+      },
+      "current_repeatable_qualification_authorizations": 2,
       "logical_root_accounts": 10,
       "platform_targets": 40,
+      "preserved_single_use_business_versions": 2,
       "projection_contract_version": "brand-publication-projection-v2",
       "projection_items": 34,
-      "qualifications": 30
+      "qualifications": 30,
+      "repeatable_business_authorizations": 2,
+      "synthetic_single_use_authorizations": 2
     },
     "inventory": {
       "active_account_names": [
@@ -56,7 +95,7 @@
         "阿野在笛语·成都金牛店"
       ],
       "active_accounts": 10,
-      "authorizations": 2,
+      "authorizations": 6,
       "carrier_rows": 20,
       "expired_rk_ec_08": 1,
       "judgments": 4,
@@ -71,18 +110,21 @@
       "qualifications": 30,
       "regional_store_entries": 31,
       "regional_store_projection_items": 28,
+      "repeatable_business_authorizations": 2,
       "series": 2,
-      "source_documents": 27
+      "source_documents": 27,
+      "synthetic_single_use_authorizations": 2
     },
-    "object_fingerprint": "e48dc6542db65593bb3830eda9cebad425d54b756d34a1ce469b88931eef6b88"
+    "object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98"
   },
   "round_two": {
-    "batch_digest": "f15d0efe63173b1b6c72b5b4cf4681673cf29e4536fe600e3d92066e52781750",
+    "batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
     "counts": {
       "account_roles": 30,
       "accounts": 39,
       "auth_grants": 33,
-      "authorizations": 2,
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
       "import_audits": 1,
       "legacy_tasks": 1,
       "library_entries": 35,
@@ -102,12 +144,50 @@
       "users": 9
     },
     "formal_readback": {
-      "authorizations": 2,
+      "authorization_amendment_id": "AMD-AUTH-20260809-01",
+      "authorization_supersede_chains": [
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "5058cd90-e05b-5800-b311-d17bd62b8bea",
+          "authorization_version": "v2",
+          "digest": "d0b99d2f07ac48e51eff3309be777b0b05cddc7a22f6c910000c163ddb194900",
+          "prior_authorization_id": "89b29389-0e77-518f-b9d3-959a4f60fb9d",
+          "prior_authorization_version": "v1",
+          "prior_digest": "247a8ae5db07cd34c410ebd18f1fda1c1bad4d94b9ff7ad2248db92c90fc5c1e"
+        },
+        {
+          "amendment_commit": "b107ee02ac39acd93dfb259b9f3e73d3f7318792",
+          "amendment_id": "AMD-AUTH-20260809-01",
+          "authorization_id": "9f4a5a50-f462-53d0-8689-1f4413de4eea",
+          "authorization_version": "v2",
+          "digest": "4060c76d3faeedd89ce919d31f00fe49633a59bc3458dce3b53d985a82941ae6",
+          "prior_authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
+          "prior_authorization_version": "v1",
+          "prior_digest": "6400927f6262a1e1cb0c7d5f9b6da7af5450e2105066495f52bd8731acd332b4"
+        }
+      ],
+      "authorization_supersede_events": 2,
+      "authorizations": 6,
+      "business_authorization_versions": {
+        "PS-S02-05": [
+          "v1",
+          "v2"
+        ],
+        "PS-S04-03": [
+          "v1",
+          "v2"
+        ]
+      },
+      "current_repeatable_qualification_authorizations": 2,
       "logical_root_accounts": 10,
       "platform_targets": 40,
+      "preserved_single_use_business_versions": 2,
       "projection_contract_version": "brand-publication-projection-v2",
       "projection_items": 34,
-      "qualifications": 30
+      "qualifications": 30,
+      "repeatable_business_authorizations": 2,
+      "synthetic_single_use_authorizations": 2
     },
     "inventory": {
       "active_account_names": [
@@ -123,7 +203,7 @@
         "阿野在笛语·成都金牛店"
       ],
       "active_accounts": 10,
-      "authorizations": 2,
+      "authorizations": 6,
       "carrier_rows": 20,
       "expired_rk_ec_08": 1,
       "judgments": 4,
@@ -138,10 +218,12 @@
       "qualifications": 30,
       "regional_store_entries": 31,
       "regional_store_projection_items": 28,
+      "repeatable_business_authorizations": 2,
       "series": 2,
-      "source_documents": 27
+      "source_documents": 27,
+      "synthetic_single_use_authorizations": 2
     },
-    "object_fingerprint": "e48dc6542db65593bb3830eda9cebad425d54b756d34a1ce469b88931eef6b88"
+    "object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98"
   },
   "schema_revision": "20260818_45"
 }

@@ -321,7 +321,7 @@ class PostgresContentRepository(ContentRepository):
             "PS-S04-05",
         }
     )
-    _SINGLE_USE_PERSONA_QUOTE_IDS = frozenset({"PS-S02-05", "PS-S04-03"})
+    _VERSIONED_PERSONA_QUOTE_IDS = frozenset({"PS-S02-05", "PS-S04-03"})
     _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS = _DUAL_TRACK_COMPLETION_KEYS - _PUBLICATION_COMPLETION_KEYS
     _MEDIA_NATIVE_COMPLETION_KEYS = _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
     _LEGACY_DUAL_TRACK_COMPLETION_KEYS = _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
@@ -504,21 +504,20 @@ class PostgresContentRepository(ContentRepository):
         )
         if any(ref not in cls._PERSONA_QUOTE_IDS or ref not in frozen_quote_refs for ref in quote_ids):
             raise DomainError("Writer 人设原句引用超出冻结授权条目")
-        single_use_quote_ids = cls._SINGLE_USE_PERSONA_QUOTE_IDS.intersection(quote_ids)
-        if not single_use_quote_ids:
+        versioned_quote_ids = cls._VERSIONED_PERSONA_QUOTE_IDS.intersection(quote_ids)
+        if not versioned_quote_ids:
             return
         evidence = publication.get("brand_relevance_evidence") if isinstance(publication, Mapping) else None
         if not isinstance(evidence, Mapping) or evidence.get("authorization") is None:
-            raise DomainError("Writer 单次人设原句缺少冻结核销授权")
+            raise DomainError("Writer 人设原句缺少冻结授权")
         authorization_document = evidence["authorization"]
         authorization = authorization_contract_from_document(authorization_document)
         if (
-            len(single_use_quote_ids) != 1
-            or authorization.single_use is not True
-            or authorization.subject_ref != next(iter(single_use_quote_ids))
+            len(versioned_quote_ids) != 1
+            or authorization.subject_ref != next(iter(versioned_quote_ids))
             or evidence.get("authorization_ref") != authorization.authorization_id
         ):
-            raise DomainError("Writer 单次人设原句与冻结核销授权不一致")
+            raise DomainError("Writer 人设原句与冻结授权不一致")
 
     @classmethod
     def _version_audit_snapshot(

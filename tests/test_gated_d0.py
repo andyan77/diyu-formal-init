@@ -32,11 +32,16 @@ from src.shared.types import BrandContext, BrandContextPacketV3, TenantManagemen
 _RERUN03_FACT_ID = "fact:product:gated-rerun-03"
 
 
-def _rerun03_authorization(subject_ref: str) -> AuthorizationContractV1:
+def _rerun03_authorization(
+    subject_ref: str,
+    *,
+    authorization_version: str = "v1",
+    single_use: bool = True,
+) -> AuthorizationContractV1:
     draft = AuthorizationContractV1(
         contract_version=AUTHORIZATION_CONTRACT_VERSION,
         authorization_id=str(uuid4()),
-        authorization_version="v1",
+        authorization_version=authorization_version,
         subject_ref=subject_ref,
         tenant_id=str(uuid4()),
         brand_id=str(uuid4()),
@@ -44,7 +49,7 @@ def _rerun03_authorization(subject_ref: str) -> AuthorizationContractV1:
         organization_id=str(uuid4()),
         allowed_source_digest="a" * 64,
         allowed_usage=("organization_people",),
-        single_use=True,
+        single_use=single_use,
         effective_at="2026-08-08T00:00:00+00:00",
         expires_at=None,
         digest="",
@@ -537,7 +542,7 @@ def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -
         ),
         (
             _rerun03_completion_patch(quote_ids=["PS-S02-05"]),
-            "Writer 单次人设原句缺少冻结核销授权",
+            "Writer 人设原句缺少冻结授权",
         ),
     ),
 )
@@ -565,3 +570,30 @@ def test_gated_rerun03_single_use_quote_matches_frozen_authorization() -> None:
     )
 
     assert merged["used_persona_quote_ids"] == [authorization.subject_ref]
+
+
+@pytest.mark.parametrize("subject_ref", ("PS-S02-05", "PS-S04-03"))
+def test_gated_rerun05_repeatable_persona_quote_can_be_committed_again(
+    subject_ref: str,
+) -> None:
+    authorization = _rerun03_authorization(
+        subject_ref,
+        authorization_version="v2",
+        single_use=False,
+    )
+    patch = _rerun03_completion_patch(
+        quote_ids=[authorization.subject_ref],
+        authorization=authorization,
+    )
+
+    first = PostgresContentRepository._validated_completion_snapshot(
+        _rerun03_task_snapshot(patch),
+        patch,
+    )
+    second = PostgresContentRepository._validated_completion_snapshot(
+        _rerun03_task_snapshot(patch),
+        patch,
+    )
+
+    assert first["used_persona_quote_ids"] == [subject_ref]
+    assert second["used_persona_quote_ids"] == [subject_ref]
